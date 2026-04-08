@@ -6,7 +6,6 @@ module tb_dma_core;
   logic [63:0] bar_rdata, bar_wdata;
   logic bar_wen;
 
-  // AXI burst interface
   logic rburst_req_ready, rburst_req_valid;
   logic [3:0] rburst_req_id;
   logic [63:0] rburst_req_addr;
@@ -22,14 +21,13 @@ module tb_dma_core;
   logic wburst_rsp_valid;
   logic [3:0] wburst_rsp_id;
 
-  // Simulated host memory
   logic [63:0] host_mem [0:15];
 
   dma_core dut (.*);
 
   always #5 clk = ~clk;
 
-  // Simulate AXI read: when rburst_req_valid, return data after 2 cycles
+  // Simulate AXI read
   int read_delay;
   logic [63:0] pending_raddr;
   always_ff @(posedge clk) begin
@@ -43,75 +41,79 @@ module tb_dma_core;
         rburst_rsp_valid <= 1;
         rburst_rsp_data <= host_mem[pending_raddr[6:3]];
         rburst_rsp_id <= 0;
+        $display("  AXI_READ: addr=%h -> data=%h", pending_raddr, host_mem[pending_raddr[6:3]]);
       end
     end
   end
 
-  // Simulate AXI write: when wburst_req_valid, accept and store
+  // Simulate AXI write
   always_ff @(posedge clk) begin
     wburst_rsp_valid <= 0;
     if (wburst_req_valid && wburst_req_ready) begin
       host_mem[wburst_req_addr[6:3]] <= wburst_req_data;
       wburst_rsp_valid <= 1;
       wburst_rsp_id <= 0;
-      $display("  WRITE: addr=%h data=%h", wburst_req_addr, wburst_req_data);
+      $display("  AXI_WRITE: addr=%h data=%h", wburst_req_addr, wburst_req_data);
     end
   end
 
   task write_reg(input [19:0] addr, input [63:0] data);
     @(posedge clk);
-    bar_waddr <= addr; bar_wdata <= data; bar_wen <= 1;
+    bar_waddr = addr; bar_wdata = data; bar_wen = 1;
     @(posedge clk);
-    bar_wen <= 0;
+    bar_wen = 0;
   endtask
 
   task read_reg(input [19:0] addr, output [63:0] data);
     @(posedge clk);
-    bar_raddr <= addr;
+    bar_raddr = addr;
     @(posedge clk);
     @(posedge clk);
     data = bar_rdata;
   endtask
 
-  logic [63:0] ctrl;
+  logic [63:0] ctrl, dbg_state, dbg_raddr, dbg_rdata, dbg_waddr, dbg_wdata, dbg_cnt;
   int pass;
 
   initial begin
-    // Init
     bar_wen = 0; bar_waddr = 0; bar_wdata = 0; bar_raddr = 0;
     rburst_req_ready = 1; wburst_req_ready = 1;
     rburst_rsp_valid = 0; wburst_rsp_valid = 0;
     read_delay = 0;
 
-    // Init host memory: src at 0x00, dst at 0x40
     for (int i = 0; i < 8; i++) host_mem[i] = 64'hCAFEF00D00000000 + i;
     for (int i = 8; i < 16; i++) host_mem[i] = 0;
 
-    // Reset
     #20 rst_n = 1;
     #20;
 
     $display("=== DMA Core Testbench ===");
-    $display("Source data (host_mem[0:7]):");
-    for (int i = 0; i < 8; i++) $display("  [%0d] = %h", i, host_mem[i]);
+    $display("Source (host_mem[0:3]): %h %h %h %h", host_mem[0], host_mem[1], host_mem[2], host_mem[3]);
 
-    // Configure DMA: src=0x00, dst=0x40, len=4
-    write_reg(20'h08, 64'h0000_0000_0000_0000);  // SRC_ADDR
-    write_reg(20'h10, 64'h0000_0000_0000_0040);  // DST_ADDR
-    write_reg(20'h18, 64'h4);                     // LEN = 4 words
+    write_reg(20'h08, 64'h0000_0000_0000_0000);  // SRC
+    write_reg(20'h10, 64'h0000_0000_0000_0040);  // DST
+    write_reg(20'h18, 64'h4);                     // LEN=4
 
     $display("\nStarting DMA: src=0x00 dst=0x40 len=4");
     write_reg(20'h20, 64'h1);  // GO
 
-    // Wait for completion
-    repeat (100) @(posedge clk);
+    repeat (200) @(posedge clk);
 
-    // Check CTRL
     read_reg(20'h20, ctrl);
-    $display("\nCTRL after wait: %h (busy=%b)", ctrl, ctrl[1]);
+    read_reg(20'h28, dbg_state);
+    read_reg(20'h30, dbg_raddr);
+    read_reg(20'h38, dbg_rdata);
+    read_reg(20'h40, dbg_waddr);
+    read_reg(20'h48, dbg_wdata);
+    read_reg(20'h50, dbg_cnt);
 
-    // Verify destination
-    $display("\nDestination data (host_mem[8:11]):");
+    $display("\nDebug registers:");
+    $display("  CTRL=%h STATE=%h", ctrl, dbg_state);
+    $display("  RADDR=%h RDATA=%h", dbg_raddr, dbg_rdata);
+    $display("  WADDR=%h WDATA=%h", dbg_waddr, dbg_wdata);
+    $display("  CNT=%h (wcnt:rcnt)", dbg_cnt);
+
+    $display("\nDestination (host_mem[8:11]):");
     pass = 1;
     for (int i = 0; i < 4; i++) begin
       $display("  [%0d] = %h (expected %h)", i+8, host_mem[i+8], host_mem[i]);
