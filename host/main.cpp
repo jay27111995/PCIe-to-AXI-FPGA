@@ -2,8 +2,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <unistd.h>
 
-// Register offsets
 #define REG_RESET    0x00
 #define REG_SRC_ADDR 0x08
 #define REG_DST_ADDR 0x10
@@ -27,11 +27,9 @@ int main(int argc, char* argv[])
   auto& bar = *pf.BARs[0];
   bar.map();
 
-  // Reset DMA
   printf("=== Reset DMA ===\n");
-  bar.write32(REG_RESET, 1);
+  bar.write64(REG_RESET, 1);
 
-  // Test SRAM write/read
   printf("\n=== Test SRAM ===\n");
   for (int i = 0; i < 8; i++) {
     uint64_t val = 0xDEADBEEF00000000ULL | i;
@@ -42,14 +40,11 @@ int main(int argc, char* argv[])
     printf("SRAM[%d] = 0x%016lx\n", i, val);
   }
 
-  // Test DMA: copy from host memory to host memory
   printf("\n=== Test DMA ===\n");
   
-  // Allocate DMA buffers
   uint64_t* src = (uint64_t*)pf.createDmaArea(4096, 0);
   uint64_t* dst = (uint64_t*)pf.createDmaArea(4096, 0);
   
-  // Initialize source
   for (int i = 0; i < 8; i++) {
     src[i] = 0xCAFEF00D00000000ULL | i;
   }
@@ -59,22 +54,33 @@ int main(int argc, char* argv[])
   for (int i = 0; i < 8; i++)
     printf("  src[%d] = 0x%016lx\n", i, src[i]);
 
-  // Configure and start DMA
+  printf("src_addr=0x%lx dst_addr=0x%lx\n", (uint64_t)src, (uint64_t)dst);
+
   bar.write64(REG_SRC_ADDR, (uint64_t)src);
   bar.write64(REG_DST_ADDR, (uint64_t)dst);
   bar.write64(REG_LEN, 8);
-  bar.write64(REG_CTRL, 1);  // GO
+  
+  printf("Readback: SRC=0x%lx DST=0x%lx LEN=0x%lx\n", 
+         bar.read64(REG_SRC_ADDR), bar.read64(REG_DST_ADDR), bar.read64(REG_LEN));
 
-  // Wait for completion
-  while (bar.read64(REG_CTRL) & 2) {
-    // busy wait
+  printf("Starting DMA (CTRL=1)...\n");
+  bar.write64(REG_CTRL, 1);
+  
+  usleep(1000);  // Small delay
+  
+  uint64_t ctrl;
+  int timeout = 1000;
+  while ((ctrl = bar.read64(REG_CTRL)) & 2) {
+    printf("CTRL=0x%lx (busy)\n", ctrl);
+    usleep(100);
+    if (--timeout == 0) { printf("Timeout!\n"); break; }
   }
+  printf("CTRL=0x%lx (done)\n", ctrl);
 
   printf("Destination:\n");
   for (int i = 0; i < 8; i++)
     printf("  dst[%d] = 0x%016lx\n", i, dst[i]);
 
-  // Verify
   bool pass = memcmp(src, dst, 64) == 0;
   printf("\n=== TEST %s ===\n", pass ? "PASSED" : "FAILED");
 

@@ -39,8 +39,12 @@ module dma_core (
 
   wire rst = ~rst_n | soft_rst;
 
-  typedef enum logic [1:0] {IDLE, READ, WRITE} state_t;
+  typedef enum logic [1:0] {IDLE, READ, WAIT_RDATA, WRITE} state_t;
   state_t state;
+
+  // Latch for read data
+  logic [63:0] rdata_latched;
+  logic rdata_valid;
 
   // 16KB SRAM (2048 x 64-bit)
   logic [63:0] mem [0:2047];
@@ -57,7 +61,20 @@ module dma_core (
     mem_rdata <= mem[bar_raddr[13:3]];
   end
 
-  // Register writes
+  // Latch read response data
+  always_ff @(posedge clk) begin
+    if (rst) begin
+      rdata_valid <= 0;
+      rdata_latched <= '0;
+    end else if (rburst_rsp_valid) begin
+      rdata_latched <= rburst_rsp_data;
+      rdata_valid <= 1;
+    end else if (state == WRITE && wburst_req_ready) begin
+      rdata_valid <= 0;
+    end
+  end
+
+  // State machine
   always_ff @(posedge clk) begin
     if (rst) begin
       reg_src <= '0; reg_dst <= '0; reg_len <= '0;
@@ -76,8 +93,9 @@ module dma_core (
             endcase
           end
         end
-        READ: if (rburst_req_ready) state <= WRITE;
-        WRITE: if (wburst_req_ready && rburst_rsp_valid) begin
+        READ: if (rburst_req_ready) state <= WAIT_RDATA;
+        WAIT_RDATA: if (rdata_valid) state <= WRITE;
+        WRITE: if (wburst_req_ready) begin
           if (xfer_cnt + 1 >= reg_len) begin state <= IDLE; busy <= 0; end
           else begin xfer_cnt <= xfer_cnt + 1; state <= READ; end
         end
@@ -100,16 +118,17 @@ module dma_core (
   // BAR read mux: page 0 = regs, pages 1-4 = mem
   assign bar_rdata = (bar_raddr[14:12] == 0) ? reg_rdata : mem_rdata;
 
-  // AXI burst
+  // AXI burst - read request
   assign rburst_req_valid = (state == READ);
   assign rburst_req_id    = '0;
   assign rburst_req_addr  = reg_src + {53'd0, xfer_cnt, 3'd0};
   assign rburst_req_len   = '0;
 
-  assign wburst_req_valid = (state == WRITE) && rburst_rsp_valid;
+  // AXI burst - write request (use latched data)
+  assign wburst_req_valid = (state == WRITE);
   assign wburst_req_id    = '0;
   assign wburst_req_addr  = reg_dst + {53'd0, xfer_cnt, 3'd0};
-  assign wburst_req_data  = rburst_rsp_data;
+  assign wburst_req_data  = rdata_latched;
   assign wburst_req_len   = '0;
 
 endmodule
