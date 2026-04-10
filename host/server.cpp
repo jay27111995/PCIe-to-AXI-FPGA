@@ -1,5 +1,6 @@
 #include "pcie-util.h"
 #include <cstdio>
+#include <cstdint>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -46,10 +47,10 @@ int main(int argc, char* argv[]) {
 
         // Send BAR0 offset
         write(client, &reg.offset, sizeof(reg.offset));
-        
+
         // Send device FD and container FD
         send_fds(client, dev.mDeviceFd, dev.mContainerFd);
-        printf("[Server] Sent FDs to client\n");
+        printf("[Server] Client connected\n");
         close(client);
     }
 

@@ -31,7 +31,7 @@ int main(int argc, char* argv[])
   printf("\n=== Test DMA ===\n");
   uint64_t* src = (uint64_t*)pf.createDmaArea(4096, 0x100000);
   uint64_t* dst = (uint64_t*)pf.createDmaArea(4096, 0x200000);
-  
+
   src[0] = 0xCAFEF00D12345678ULL;
   dst[0] = 0;
   _mm_clflush(src); _mm_clflush(dst); _mm_mfence();
@@ -43,7 +43,7 @@ int main(int argc, char* argv[])
   usleep(10000);
 
   _mm_clflush(dst); _mm_mfence();
-  
+
   bool pass = (dst[0] == src[0]);
   printf("src=%016lx dst=%016lx\n", src[0], dst[0]);
   printf("\n=== TEST %s ===\n", pass ? "PASSED" : "FAILED");

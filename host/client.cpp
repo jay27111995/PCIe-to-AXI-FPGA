@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstring>
 #include <cassert>
+#include <cerrno>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/mman.h>
@@ -33,29 +34,45 @@ static void recv_fds(int sock, uint64_t* bar_offset, int* dev_fd, int* container
     *container_fd = fds[1];
 }
 
-static void* create_dma(int container_fd, uint64_t size, uint64_t iova) {
+static void* create_dma(int container_fd, uint64_t size, uint64_t* out_iova) {
+    // Let kernel pick VA, then use that as IOVA
     void* p = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (p == MAP_FAILED) {
+        perror("mmap DMA");
+        return NULL;
+    }
+
+    uint64_t iova = (uint64_t)p;
     struct vfio_iommu_type1_dma_map dma_map = {
         .argsz = sizeof(dma_map),
         .flags = VFIO_DMA_MAP_FLAG_READ | VFIO_DMA_MAP_FLAG_WRITE,
-        .vaddr = (uint64_t)p,
+        .vaddr = iova,
         .iova = iova,
         .size = size
     };
-    if (ioctl(container_fd, VFIO_IOMMU_MAP_DMA, &dma_map) < 0) {
-        perror("VFIO_IOMMU_MAP_DMA");
-        return NULL;
+
+    // If IOVA taken, try next pages
+    for (int i = 0; i < 256; i++) {
+        if (ioctl(container_fd, VFIO_IOMMU_MAP_DMA, &dma_map) == 0) {
+            *out_iova = dma_map.iova;
+            return p;
+        }
+        if (errno != EEXIST) {
+            perror("VFIO_IOMMU_MAP_DMA");
+            munmap(p, size);
+            return NULL;
+        }
+        dma_map.iova += 0x1000;
     }
-    return p;
+
+    fprintf(stderr, "Failed to find free IOVA\n");
+    munmap(p, size);
+    return NULL;
 }
 
 int main(int argc, char* argv[]) {
-    uint64_t src_iova = 0x300000;  // Default IOVAs
-    uint64_t dst_iova = 0x400000;
     uint64_t sram_page = 0x1000;   // Default SRAM page offset
-    if (argc > 1) src_iova = strtoull(argv[1], NULL, 0);
-    if (argc > 2) dst_iova = strtoull(argv[2], NULL, 0);
-    if (argc > 3) sram_page = strtoull(argv[3], NULL, 0);
+    if (argc > 1) sram_page = strtoull(argv[1], NULL, 0);
 
     int sock = socket(AF_UNIX, SOCK_STREAM, 0);
     struct sockaddr_un addr = {.sun_family = AF_UNIX};
@@ -70,7 +87,6 @@ int main(int argc, char* argv[]) {
     close(sock);
 
     printf("[Client] dev_fd=%d container_fd=%d bar_offset=0x%lx\n", dev_fd, container_fd, bar_offset);
-    printf("[Client] Using src_iova=0x%lx dst_iova=0x%lx\n", src_iova, dst_iova);
 
     // Map BAR - only map 4KB page
     volatile uint64_t* bar = (volatile uint64_t*)mmap(NULL, 0x1000, PROT_READ | PROT_WRITE,
@@ -85,8 +101,9 @@ int main(int argc, char* argv[]) {
     printf("[Client] Regs mapped: va=%p (page at BAR+0x0)\n", regs);
 
     // Create DMA areas using container FD
-    uint64_t* src = (uint64_t*)create_dma(container_fd, 4096, src_iova);
-    uint64_t* dst = (uint64_t*)create_dma(container_fd, 4096, dst_iova);
+    uint64_t src_iova, dst_iova;
+    uint64_t* src = (uint64_t*)create_dma(container_fd, 4096, &src_iova);
+    uint64_t* dst = (uint64_t*)create_dma(container_fd, 4096, &dst_iova);
     assert(src && "create_dma src failed");
     assert(dst && "create_dma dst failed");
     printf("[Client] DMA src: va=%p iova=0x%lx\n", src, src_iova);
@@ -103,7 +120,7 @@ int main(int argc, char* argv[]) {
     regs[REG_RESET/8] = 1;
     usleep(1000);
 
-    src[0] = 0xCAFEF00D00000000ULL | (src_iova & 0xFFFF);
+    src[0] = 0xCAFEF00D00000000ULL | (sram_page & 0xFFFF);
     dst[0] = 0;
     _mm_clflush(src); _mm_clflush(dst); _mm_mfence();
 
@@ -119,7 +136,7 @@ int main(int argc, char* argv[]) {
 
     printf("[Client] dst[0]=%016lx\n", dst[0]);
     assert(dst[0] == src[0] && "DMA transfer failed");
-    
+
     printf("[Client] PASS\n");
 
     printf("[Client] Press Enter to exit...\n");
