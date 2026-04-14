@@ -34,12 +34,12 @@ public:
   std::array<std::optional<BaseAddressRegister>, 6> BARs;
   int mDeviceFd = 0;
   int mContainerFd = 0;
+  int mGroupFd = 0;
 
 private:
   void findIommuGroup();
   std::string mDeviceStr;
   int mMmuGroup = 0;
-  int mGroupFd = 0;
 };
 
 } // namespace PCIe
