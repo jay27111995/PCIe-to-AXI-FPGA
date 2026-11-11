@@ -12,31 +12,70 @@ Intel R-Tile PCIe Gen5 x16 to AXI-Lite bridge with DMA engine for Agilex 7 FPGA.
 
 ## Architecture
 
+```mermaid
+graph TB
+    subgraph Host
+        CPU[Host CPU]
+    end
+    
+    subgraph FPGA[Agilex 7 FPGA]
+        RTILE[Intel R-Tile PCIe IP<br/>Gen5 x16]
+        
+        subgraph Bridge[axi_bridge_hw]
+            DECODE[Address Decoder<br/>13:12 = 00→regs, 01→dma, 10→ram]
+            REGS[axi_regs<br/>0x0000-0x0FFF<br/>scratch, status]
+            DMA[dma_engine<br/>0x1000-0x1FFF<br/>H2C/C2H DMA]
+            RAM[axi_ram<br/>0x2000-0x2FFF<br/>4KB local]
+        end
+    end
+    
+    CPU -->|PCIe Gen5 x16| RTILE
+    RTILE -->|AXI-Lite| DECODE
+    DECODE --> REGS
+    DECODE --> DMA
+    DECODE --> RAM
+    DMA -->|AXI Master| CPU
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         Intel R-Tile PCIe IP                                │
-│                    (intel_pcie_axi_mcdma, Gen5 x16)                        │
-│                         Handles TLP ↔ AXI                                   │
-└────────────────────────────────┬────────────────────────────────────────────┘
-                                 │ AXI-Lite
-                                 ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           axi_bridge_hw                                     │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                      Address Decoder                                  │   │
-│  │        [13:12] = 00 → regs, 01 → dma, 10 → ram                       │   │
-│  └──────────────────┬─────────────────┬─────────────────┬───────────────┘   │
-│                     │                 │                 │                    │
-│  ┌─────────────────┐│ ┌──────────────┐│ ┌──────────────┐│                   │
-│  │   axi_regs      ││ │  dma_engine  ││ │   axi_ram    ││                   │
-│  │ 0x0000-0x0FFF   ││ │ 0x1000-0x1FFF││ │ 0x2000-0x2FFF││                   │
-│  │ scratch, status ││ │ H2C/C2H DMA  ││ │ 4KB local    ││                   │
-│  └─────────────────┘│ └──────┬───────┘│ └──────────────┘│                   │
-│                     │        │        │                  │                   │
-└─────────────────────┼────────┼────────┼──────────────────┼───────────────────┘
-                              │ AXI Master (DMA to host)
-                              ▼
-                         Host Memory
+
+## Data Flow
+
+```mermaid
+sequenceDiagram
+    participant Host
+    participant RTile as R-Tile PCIe IP
+    participant Bridge as axi_bridge_hw
+    participant RAM as axi_ram
+
+    Note over Host,RAM: Write Transaction
+    Host->>RTile: Memory Write TLP (addr=0x2000, data=0xCAFE)
+    RTile->>Bridge: rx_st_valid, rx_st_header, rx_st_data
+    Bridge->>RAM: AXI Write (awaddr, wdata, wstrb)
+    RAM-->>Bridge: AXI Write Response (bresp=OK)
+    
+    Note over Host,RAM: Read Transaction
+    Host->>RTile: Memory Read TLP (addr=0x2000)
+    RTile->>Bridge: rx_st_valid, rx_st_header
+    Bridge->>RAM: AXI Read (araddr)
+    RAM-->>Bridge: AXI Read Response (rdata)
+    Bridge->>RTile: Completion TLP (data=0xCAFE)
+    RTile-->>Host: Completion
+```
+
+## AXI RAM Read Timing
+
+```mermaid
+sequenceDiagram
+    participant M as AXI Master
+    participant S as axi_ram
+
+    M->>S: arvalid=1, araddr=0x2008
+    Note over S: arready=1, accept address<br/>Latch address, set read_pending
+    S-->>M: arready=0
+    Note over S: BRAM read latency (1 cycle)
+    S-->>M: rvalid=1, rdata=mem[addr]
+    M->>S: rready=1
+    Note over S: Transaction complete
+    S-->>M: rvalid=0, arready=1
 ```
 
 ## Memory Map (BAR0, 64KB)
@@ -74,7 +113,7 @@ PCIe-to-AXI-FPGA/
 │   ├── rtile_crdt.sv       # Credit manager (simulation only)
 │   ├── rtile_top.sv        # TLP bridge (simulation only)
 │   ├── axi_regs.sv         # Control registers
-│   ├── axi_ram.sv          # 4KB SRAM
+│   ├── axi_ram.sv          # 4KB SRAM (M20K BRAM)
 │   ├── dma_engine.sv       # DMA controller
 │   ├── pcie_axi_top.sv     # Simulation top-level
 │   └── axi_bridge_hw.sv    # FPGA top-level (Qsys component)
@@ -195,36 +234,6 @@ echo "IOMMU group: $GRP"
 
 ```bash
 sudo ./host/bin/test_bridge $PCI $GRP
-```
-
-Expected output:
-```
-=== PCIe-to-AXI Bridge Test ===
-PCI: 0000:b1:00.0, IOMMU Group: 12
-BAR0 mapped at 0x7f1234560000, size 65536 bytes
-
-=== Test 1: Scratch Register ===
-  Write: 0xcafebabe12345678
-  Read:  0xcafebabe12345678
-  ✓ PASS
-
-=== Test 2: RAM Write/Read ===
-  Write: 0x1111222233334444 @ 0x2000
-  Read:  0x1111222233334444
-  ✓ PASS
-
-=== Test 3: RAM Pattern Test ===
-  64/64 words verified
-  ✓ PASS
-
-=== Test 4: DMA Register Access ===
-  DMA status: 0x0000000000000000
-  host_lo: 0x0000000080000000 (expect 0x80000000)
-  local:   0x0000000000002000 (expect 0x2000)
-  length:  0x0000000000000040 (expect 0x40)
-  ✓ PASS
-
-=== Results: 0 tests failed ===
 ```
 
 ## DMA Usage
