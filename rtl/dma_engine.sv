@@ -2,12 +2,11 @@
 // dma_engine.sv - BAR-triggered DMA controller
 //
 // Register Map (BAR access):
-//   0x00: ctrl     - [0]=start, [1]=dir (0=read/H2C, 1=write/C2H), [2]=irq_en
-//   0x08: status   - [0]=busy, [1]=done, [2]=error
-//   0x10: host_addr_lo
-//   0x18: host_addr_hi
-//   0x20: local_addr
-//   0x28: length   - bytes to transfer
+//   0x00: ctrl       - [0]=start, [1]=dir (0=read/H2C, 1=write/C2H), [2]=irq_en
+//   0x08: status     - [0]=busy, [1]=done, [2]=error
+//   0x10: host_addr  - 64-bit host memory address
+//   0x18: local_addr - 32-bit local RAM address
+//   0x20: length     - bytes to transfer
 //
 // DMA Read (H2C):  Host memory → local RAM (issues PCIe MRd, receives CplD)
 // DMA Write (C2H): Local RAM → host memory (issues PCIe MWr)
@@ -104,8 +103,7 @@ module dma_engine
     //-------------------------------------------------------------------------
     logic [31:0] ctrl_reg;
     logic [31:0] status_reg;
-    logic [31:0] host_addr_lo;
-    logic [31:0] host_addr_hi;
+    logic [63:0] host_addr;
     logic [31:0] local_addr;
     logic [31:0] length_reg;
 
@@ -122,8 +120,7 @@ module dma_engine
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             ctrl_reg <= 0;
-            host_addr_lo <= 0;
-            host_addr_hi <= 0;
+            host_addr <= 0;
             local_addr <= 0;
             length_reg <= 0;
             s_axi_awready <= 1;
@@ -136,11 +133,10 @@ module dma_engine
 
             if (s_axi_awvalid && s_axi_wvalid && s_axi_awready) begin
                 case (s_axi_awaddr[7:0])
-                    8'h00: ctrl_reg     <= s_axi_wdata[31:0];
-                    8'h10: host_addr_lo <= s_axi_wdata[31:0];
-                    8'h18: host_addr_hi <= s_axi_wdata[31:0];
-                    8'h20: local_addr   <= s_axi_wdata[31:0];
-                    8'h28: length_reg   <= s_axi_wdata[31:0];
+                    8'h00: ctrl_reg   <= s_axi_wdata[31:0];
+                    8'h10: host_addr  <= s_axi_wdata;        // Full 64-bit
+                    8'h18: local_addr <= s_axi_wdata[31:0];
+                    8'h20: length_reg <= s_axi_wdata[31:0];
                 endcase
                 s_axi_awready <= 0;
                 s_axi_wready <= 0;
@@ -167,10 +163,9 @@ module dma_engine
                 case (s_axi_araddr[7:0])
                     8'h00: s_axi_rdata <= {32'b0, ctrl_reg};
                     8'h08: s_axi_rdata <= {32'b0, status_reg};
-                    8'h10: s_axi_rdata <= {32'b0, host_addr_lo};
-                    8'h18: s_axi_rdata <= {32'b0, host_addr_hi};
-                    8'h20: s_axi_rdata <= {32'b0, local_addr};
-                    8'h28: s_axi_rdata <= {32'b0, length_reg};
+                    8'h10: s_axi_rdata <= host_addr;          // Full 64-bit
+                    8'h18: s_axi_rdata <= {32'b0, local_addr};
+                    8'h20: s_axi_rdata <= {32'b0, length_reg};
                     default: s_axi_rdata <= 64'hDEAD_DEAD;
                 endcase
                 s_axi_arready <= 0;
@@ -237,7 +232,7 @@ module dma_engine
                     if (start && length_reg > 0) begin
                         status_reg <= 32'h1;  // Busy
                         bytes_remaining <= length_reg;
-                        cur_host_addr <= {host_addr_hi, host_addr_lo};
+                        cur_host_addr <= host_addr;
                         cur_local_addr <= local_addr;
                         cur_tag <= 8'hA0;
                         

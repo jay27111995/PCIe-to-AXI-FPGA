@@ -26,14 +26,13 @@ Host CPU ──PCIe Gen5 x16──► R-Tile IP ──► rtile_top ──► Ad
 
 ### DMA Registers (0x0000)
 
-| Offset | Name         | Access | Description                                |
-|--------|--------------|--------|--------------------------------------------|
-| 0x00   | ctrl         | R/W    | [0] start, [1] dir (0=H2C, 1=C2H), [2] irq |
-| 0x08   | status       | RO     | [0] busy, [1] done, [2] error              |
-| 0x10   | host_addr_lo | R/W    | Host address bits [31:0]                   |
-| 0x18   | host_addr_hi | R/W    | Host address bits [63:32]                  |
-| 0x20   | local_addr   | R/W    | Local RAM address                          |
-| 0x28   | length       | R/W    | Transfer length in bytes                   |
+| Offset | Name       | Access | Description                                |
+|--------|------------|--------|--------------------------------------------|
+| 0x00   | ctrl       | R/W    | [0] start, [1] dir (0=H2C, 1=C2H), [2] irq |
+| 0x08   | status     | RO     | [0] busy, [1] done, [2] error              |
+| 0x10   | host_addr  | R/W    | 64-bit host memory address                 |
+| 0x18   | local_addr | R/W    | 32-bit local RAM address                   |
+| 0x20   | length     | R/W    | Transfer length in bytes                   |
 
 ## Quick Start
 
@@ -66,18 +65,18 @@ sudo ./host/bin/test_bridge $PCI $(basename $(readlink /sys/bus/pci/devices/$PCI
 ### C2H (FPGA → Host)
 ```c
 write64(0x1000, 0xCAFEBABE);  // Data in RAM
-write64(0x0020, 0x1000);       // local_addr
-write64(0x0010, host_phys);    // host_addr
-write64(0x0028, 8);            // length
+write64(0x0010, host_phys);    // host_addr (64-bit)
+write64(0x0018, 0x1000);       // local_addr
+write64(0x0020, 8);            // length
 write64(0x0000, 0x3);          // start + C2H
 while (read64(0x0008) & 1);    // wait
 ```
 
 ### H2C (Host → FPGA)
 ```c
-write64(0x0020, 0x1000);       // local_addr
-write64(0x0010, host_phys);    // host_addr
-write64(0x0028, 8);            // length
+write64(0x0010, host_phys);    // host_addr (64-bit)
+write64(0x0018, 0x1000);       // local_addr
+write64(0x0020, 8);            // length
 write64(0x0000, 0x1);          // start + H2C
 while (read64(0x0008) & 1);    // wait
 ```

@@ -153,16 +153,15 @@ int main(int argc, char** argv) {
     else { printf("  ✗ FAIL\n"); fail++; }
 
     // Test 3: DMA C2H (RAM → Host)
+    // New register map: 0x10=host_addr(64-bit), 0x18=local_addr, 0x20=length
     printf("Test 3: DMA C2H (RAM → Host)\n");
     send_mwr(0x1100, 0xAAAABBBBCCCCDDDD);  // Put data in RAM at 0x1100
     for (int i = 0; i < 10; i++) tick();
-    send_mwr(0x0020, 0x1100);      // local_addr = 0x1100
+    send_mwr(0x0010, 0x80000000);  // host_addr (full 64-bit, single write)
     for (int i = 0; i < 5; i++) tick();
-    send_mwr(0x0010, 0x80000000);  // host_lo
+    send_mwr(0x0018, 0x1100);      // local_addr
     for (int i = 0; i < 5; i++) tick();
-    send_mwr(0x0018, 0);           // host_hi
-    for (int i = 0; i < 5; i++) tick();
-    send_mwr(0x0028, 8);           // length
+    send_mwr(0x0020, 8);           // length
     for (int i = 0; i < 5; i++) tick();
     send_mwr(0x0000, 0x3);         // start C2H
     for (int i = 0; i < 100; i++) tick();
@@ -172,13 +171,11 @@ int main(int argc, char** argv) {
     // Test 4: DMA H2C (Host → RAM)  
     printf("Test 4: DMA H2C (Host → RAM)\n");
     host_mem[0x90000000] = 0xDEADBEEF12345678;
-    send_mwr(0x0020, 0x1200);      // local_addr = 0x1200
+    send_mwr(0x0010, 0x90000000);  // host_addr (full 64-bit, single write)
     for (int i = 0; i < 5; i++) tick();
-    send_mwr(0x0010, 0x90000000);  // host_lo
+    send_mwr(0x0018, 0x1200);      // local_addr
     for (int i = 0; i < 5; i++) tick();
-    send_mwr(0x0018, 0);           // host_hi
-    for (int i = 0; i < 5; i++) tick();
-    send_mwr(0x0028, 8);           // length
+    send_mwr(0x0020, 8);           // length
     for (int i = 0; i < 5; i++) tick();
     send_mwr(0x0000, 0x1);         // start H2C
     for (int i = 0; i < 100; i++) tick();
