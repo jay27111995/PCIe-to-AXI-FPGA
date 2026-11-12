@@ -59,8 +59,6 @@ class alignas(VL_CACHE_LINE_BYTES) Vpcie_axi_top VL_NOT_FINAL : public Verilated
     VL_INW(&rx_st_data,255,0,8);
     VL_OUTW(&tx_st_hdr,127,0,4);
     VL_OUTW(&tx_st_data,255,0,8);
-    VL_OUT(&write_count,31,0);
-    VL_OUT64(&scratch_reg,63,0);
 
     // CELLS
     // Public to allow access to /* verilator public */ items.

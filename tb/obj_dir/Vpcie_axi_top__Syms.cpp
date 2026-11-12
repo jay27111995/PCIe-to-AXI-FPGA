@@ -18,7 +18,7 @@ Vpcie_axi_top__Syms::Vpcie_axi_top__Syms(VerilatedContext* contextp, const char*
     , TOP{this, namep}
 {
         // Check resources
-        Verilated::stackCheck(823);
+        Verilated::stackCheck(787);
     // Configure time unit / time precision
     _vm_contextp__->timeunit(-12);
     _vm_contextp__->timeprecision(-12);

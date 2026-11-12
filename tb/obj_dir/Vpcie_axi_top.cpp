@@ -44,8 +44,6 @@ Vpcie_axi_top::Vpcie_axi_top(VerilatedContext* _vcontextp__, const char* _vcname
     , rx_st_data{vlSymsp->TOP.rx_st_data}
     , tx_st_hdr{vlSymsp->TOP.tx_st_hdr}
     , tx_st_data{vlSymsp->TOP.tx_st_data}
-    , write_count{vlSymsp->TOP.write_count}
-    , scratch_reg{vlSymsp->TOP.scratch_reg}
     , rootp{&(vlSymsp->TOP)}
 {
     // Register model with the context

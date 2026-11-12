@@ -225,12 +225,8 @@ VL_INLINE_OPT void Vpcie_axi_top___024root___nba_sequent__TOP__0(Vpcie_axi_top__
     __Vdly__pcie_axi_top__DOT__dma_mwr_ready = 0;
     CData/*0:0*/ __Vdly__tx_st_hvalid;
     __Vdly__tx_st_hvalid = 0;
-    IData/*31:0*/ __Vdly__pcie_axi_top__DOT__brg_awaddr;
-    __Vdly__pcie_axi_top__DOT__brg_awaddr = 0;
     CData/*0:0*/ __Vdly__pcie_axi_top__DOT__brg_awvalid;
     __Vdly__pcie_axi_top__DOT__brg_awvalid = 0;
-    QData/*63:0*/ __Vdly__pcie_axi_top__DOT__brg_wdata;
-    __Vdly__pcie_axi_top__DOT__brg_wdata = 0;
     CData/*0:0*/ __Vdly__pcie_axi_top__DOT__brg_wvalid;
     __Vdly__pcie_axi_top__DOT__brg_wvalid = 0;
     CData/*3:0*/ __Vdly__pcie_axi_top__DOT__u_bridge__DOT__state;
@@ -241,14 +237,6 @@ VL_INLINE_OPT void Vpcie_axi_top___024root___nba_sequent__TOP__0(Vpcie_axi_top__
     __Vdly__pcie_axi_top__DOT__u_bridge__DOT__bar_req_tag = 0;
     CData/*6:0*/ __Vdly__pcie_axi_top__DOT__u_bridge__DOT__bar_req_lower_addr;
     __Vdly__pcie_axi_top__DOT__u_bridge__DOT__bar_req_lower_addr = 0;
-    IData/*31:0*/ __Vdly__pcie_axi_top__DOT__brg_araddr;
-    __Vdly__pcie_axi_top__DOT__brg_araddr = 0;
-    CData/*0:0*/ __Vdly__pcie_axi_top__DOT__brg_arvalid;
-    __Vdly__pcie_axi_top__DOT__brg_arvalid = 0;
-    CData/*0:0*/ __Vdly__pcie_axi_top__DOT__brg_bready;
-    __Vdly__pcie_axi_top__DOT__brg_bready = 0;
-    CData/*0:0*/ __Vdly__pcie_axi_top__DOT__brg_rready;
-    __Vdly__pcie_axi_top__DOT__brg_rready = 0;
     QData/*63:0*/ __Vdly__pcie_axi_top__DOT__u_bridge__DOT__bar_cpl_data;
     __Vdly__pcie_axi_top__DOT__u_bridge__DOT__bar_cpl_data = 0;
     CData/*1:0*/ __Vdly__pcie_axi_top__DOT__u_bridge__DOT__bar_cpl_status;
@@ -257,14 +245,6 @@ VL_INLINE_OPT void Vpcie_axi_top___024root___nba_sequent__TOP__0(Vpcie_axi_top__
     __Vdly__pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_hdr_cnt = 0;
     IData/*19:0*/ __Vdly__pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_data_cnt;
     __Vdly__pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_data_cnt = 0;
-    IData/*31:0*/ __Vdly__pcie_axi_top__DOT__u_regs__DOT__write_cnt;
-    __Vdly__pcie_axi_top__DOT__u_regs__DOT__write_cnt = 0;
-    IData/*31:0*/ __Vdly__pcie_axi_top__DOT__u_regs__DOT__wr_addr;
-    __Vdly__pcie_axi_top__DOT__u_regs__DOT__wr_addr = 0;
-    CData/*1:0*/ __Vdly__pcie_axi_top__DOT__u_regs__DOT__wr_state;
-    __Vdly__pcie_axi_top__DOT__u_regs__DOT__wr_state = 0;
-    CData/*1:0*/ __Vdly__pcie_axi_top__DOT__u_regs__DOT__rd_state;
-    __Vdly__pcie_axi_top__DOT__u_regs__DOT__rd_state = 0;
     IData/*31:0*/ __Vdly__pcie_axi_top__DOT__u_dma__DOT__ctrl_reg;
     __Vdly__pcie_axi_top__DOT__u_dma__DOT__ctrl_reg = 0;
     IData/*31:0*/ __Vdly__pcie_axi_top__DOT__u_dma__DOT__host_addr_lo;
@@ -277,6 +257,8 @@ VL_INLINE_OPT void Vpcie_axi_top___024root___nba_sequent__TOP__0(Vpcie_axi_top__
     __Vdly__pcie_axi_top__DOT__u_dma__DOT__length_reg = 0;
     CData/*0:0*/ __Vdly__pcie_axi_top__DOT__dma_bvalid;
     __Vdly__pcie_axi_top__DOT__dma_bvalid = 0;
+    QData/*63:0*/ __Vdly__pcie_axi_top__DOT__dma_rdata;
+    __Vdly__pcie_axi_top__DOT__dma_rdata = 0;
     CData/*0:0*/ __Vdly__pcie_axi_top__DOT__dma_rvalid;
     __Vdly__pcie_axi_top__DOT__dma_rvalid = 0;
     IData/*31:0*/ __Vdly__pcie_axi_top__DOT__u_dma__DOT__bytes_remaining;
@@ -361,21 +343,17 @@ VL_INLINE_OPT void Vpcie_axi_top___024root___nba_sequent__TOP__0(Vpcie_axi_top__
     __Vdlyvval__pcie_axi_top__DOT__u_ram__DOT__mem__v7 = 0;
     CData/*0:0*/ __Vdlyvset__pcie_axi_top__DOT__u_ram__DOT__mem__v7;
     __Vdlyvset__pcie_axi_top__DOT__u_ram__DOT__mem__v7 = 0;
-    QData/*63:0*/ __Vdly__pcie_axi_top__DOT__ram_real_rdata;
-    __Vdly__pcie_axi_top__DOT__ram_real_rdata = 0;
+    SData/*8:0*/ __Vdly__pcie_axi_top__DOT__u_ram__DOT__rd_addr_latched;
+    __Vdly__pcie_axi_top__DOT__u_ram__DOT__rd_addr_latched = 0;
     CData/*0:0*/ __Vdly__pcie_axi_top__DOT__ram_real_arready;
     __Vdly__pcie_axi_top__DOT__ram_real_arready = 0;
+    CData/*0:0*/ __Vdly__pcie_axi_top__DOT__u_ram__DOT__read_pending;
+    __Vdly__pcie_axi_top__DOT__u_ram__DOT__read_pending = 0;
+    QData/*63:0*/ __Vdly__pcie_axi_top__DOT__ram_real_rdata;
+    __Vdly__pcie_axi_top__DOT__ram_real_rdata = 0;
     CData/*0:0*/ __Vdly__pcie_axi_top__DOT__ram_real_rvalid;
     __Vdly__pcie_axi_top__DOT__ram_real_rvalid = 0;
     // Body
-    __Vdly__pcie_axi_top__DOT__u_regs__DOT__wr_state 
-        = vlSelf->pcie_axi_top__DOT__u_regs__DOT__wr_state;
-    __Vdly__pcie_axi_top__DOT__u_regs__DOT__wr_addr 
-        = vlSelf->pcie_axi_top__DOT__u_regs__DOT__wr_addr;
-    __Vdly__pcie_axi_top__DOT__u_regs__DOT__write_cnt 
-        = vlSelf->pcie_axi_top__DOT__u_regs__DOT__write_cnt;
-    __Vdly__pcie_axi_top__DOT__u_regs__DOT__rd_state 
-        = vlSelf->pcie_axi_top__DOT__u_regs__DOT__rd_state;
     __Vdly__pcie_axi_top__DOT__u_dma__DOT__dma_data_buf 
         = vlSelf->pcie_axi_top__DOT__u_dma__DOT__dma_data_buf;
     __Vdly__pcie_axi_top__DOT__u_dma__DOT__dma_state 
@@ -388,33 +366,7 @@ VL_INLINE_OPT void Vpcie_axi_top___024root___nba_sequent__TOP__0(Vpcie_axi_top__
         = vlSelf->pcie_axi_top__DOT__u_dma__DOT__cur_host_addr;
     __Vdly__pcie_axi_top__DOT__u_dma__DOT__bytes_remaining 
         = vlSelf->pcie_axi_top__DOT__u_dma__DOT__bytes_remaining;
-    __Vdly__pcie_axi_top__DOT__dma_rvalid = vlSelf->pcie_axi_top__DOT__dma_rvalid;
-    __Vdly__pcie_axi_top__DOT__dma_bvalid = vlSelf->pcie_axi_top__DOT__dma_bvalid;
-    __Vdly__pcie_axi_top__DOT__u_dma__DOT__length_reg 
-        = vlSelf->pcie_axi_top__DOT__u_dma__DOT__length_reg;
-    __Vdly__pcie_axi_top__DOT__u_dma__DOT__local_addr 
-        = vlSelf->pcie_axi_top__DOT__u_dma__DOT__local_addr;
-    __Vdly__pcie_axi_top__DOT__u_dma__DOT__host_addr_hi 
-        = vlSelf->pcie_axi_top__DOT__u_dma__DOT__host_addr_hi;
-    __Vdly__pcie_axi_top__DOT__u_dma__DOT__host_addr_lo 
-        = vlSelf->pcie_axi_top__DOT__u_dma__DOT__host_addr_lo;
-    __Vdly__pcie_axi_top__DOT__u_dma__DOT__ctrl_reg 
-        = vlSelf->pcie_axi_top__DOT__u_dma__DOT__ctrl_reg;
     __Vdly__pcie_axi_top__DOT__ram_owner = vlSelf->pcie_axi_top__DOT__ram_owner;
-    __Vdly__pcie_axi_top__DOT__ram_real_rvalid = vlSelf->pcie_axi_top__DOT__ram_real_rvalid;
-    __Vdly__pcie_axi_top__DOT__ram_real_rdata = vlSelf->pcie_axi_top__DOT__ram_real_rdata;
-    __Vdly__pcie_axi_top__DOT__ram_real_arready = vlSelf->pcie_axi_top__DOT__ram_real_arready;
-    __Vdly__pcie_axi_top__DOT__ram_real_bvalid = vlSelf->pcie_axi_top__DOT__ram_real_bvalid;
-    __Vdly__pcie_axi_top__DOT__ram_real_wready = vlSelf->pcie_axi_top__DOT__ram_real_wready;
-    __Vdly__pcie_axi_top__DOT__ram_real_awready = vlSelf->pcie_axi_top__DOT__ram_real_awready;
-    __Vdlyvset__pcie_axi_top__DOT__u_ram__DOT__mem__v0 = 0U;
-    __Vdlyvset__pcie_axi_top__DOT__u_ram__DOT__mem__v1 = 0U;
-    __Vdlyvset__pcie_axi_top__DOT__u_ram__DOT__mem__v2 = 0U;
-    __Vdlyvset__pcie_axi_top__DOT__u_ram__DOT__mem__v3 = 0U;
-    __Vdlyvset__pcie_axi_top__DOT__u_ram__DOT__mem__v4 = 0U;
-    __Vdlyvset__pcie_axi_top__DOT__u_ram__DOT__mem__v5 = 0U;
-    __Vdlyvset__pcie_axi_top__DOT__u_ram__DOT__mem__v6 = 0U;
-    __Vdlyvset__pcie_axi_top__DOT__u_ram__DOT__mem__v7 = 0U;
     __Vdly__pcie_axi_top__DOT__u_bridge__DOT__bar_cpl_status 
         = vlSelf->pcie_axi_top__DOT__u_bridge__DOT__bar_cpl_status;
     __Vdly__pcie_axi_top__DOT__u_bridge__DOT__bar_cpl_data 
@@ -427,21 +379,46 @@ VL_INLINE_OPT void Vpcie_axi_top___024root___nba_sequent__TOP__0(Vpcie_axi_top__
         = vlSelf->pcie_axi_top__DOT__u_bridge__DOT__bar_req_rid;
     __Vdly__pcie_axi_top__DOT__u_bridge__DOT__state 
         = vlSelf->pcie_axi_top__DOT__u_bridge__DOT__state;
+    __Vdly__pcie_axi_top__DOT__brg_wvalid = vlSelf->pcie_axi_top__DOT__brg_wvalid;
     __Vdly__tx_st_hvalid = vlSelf->tx_st_hvalid;
     __Vdly__pcie_axi_top__DOT__dma_mwr_ready = vlSelf->pcie_axi_top__DOT__dma_mwr_ready;
     __Vdly__pcie_axi_top__DOT__dma_mrd_ready = vlSelf->pcie_axi_top__DOT__dma_mrd_ready;
-    __Vdly__pcie_axi_top__DOT__brg_arvalid = vlSelf->pcie_axi_top__DOT__brg_arvalid;
-    __Vdly__pcie_axi_top__DOT__brg_wvalid = vlSelf->pcie_axi_top__DOT__brg_wvalid;
-    __Vdly__pcie_axi_top__DOT__brg_rready = vlSelf->pcie_axi_top__DOT__brg_rready;
-    __Vdly__pcie_axi_top__DOT__brg_bready = vlSelf->pcie_axi_top__DOT__brg_bready;
-    __Vdly__pcie_axi_top__DOT__brg_wdata = vlSelf->pcie_axi_top__DOT__brg_wdata;
     __Vdly__pcie_axi_top__DOT__brg_awvalid = vlSelf->pcie_axi_top__DOT__brg_awvalid;
-    __Vdly__pcie_axi_top__DOT__brg_araddr = vlSelf->pcie_axi_top__DOT__brg_araddr;
-    __Vdly__pcie_axi_top__DOT__brg_awaddr = vlSelf->pcie_axi_top__DOT__brg_awaddr;
     __Vdly__pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_data_cnt 
         = vlSelf->pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_data_cnt;
     __Vdly__pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_hdr_cnt 
         = vlSelf->pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_hdr_cnt;
+    __Vdly__pcie_axi_top__DOT__ram_real_rvalid = vlSelf->pcie_axi_top__DOT__ram_real_rvalid;
+    __Vdly__pcie_axi_top__DOT__ram_real_rdata = vlSelf->pcie_axi_top__DOT__ram_real_rdata;
+    __Vdly__pcie_axi_top__DOT__u_ram__DOT__read_pending 
+        = vlSelf->pcie_axi_top__DOT__u_ram__DOT__read_pending;
+    __Vdly__pcie_axi_top__DOT__u_ram__DOT__rd_addr_latched 
+        = vlSelf->pcie_axi_top__DOT__u_ram__DOT__rd_addr_latched;
+    __Vdly__pcie_axi_top__DOT__ram_real_arready = vlSelf->pcie_axi_top__DOT__ram_real_arready;
+    __Vdly__pcie_axi_top__DOT__ram_real_bvalid = vlSelf->pcie_axi_top__DOT__ram_real_bvalid;
+    __Vdly__pcie_axi_top__DOT__ram_real_wready = vlSelf->pcie_axi_top__DOT__ram_real_wready;
+    __Vdly__pcie_axi_top__DOT__ram_real_awready = vlSelf->pcie_axi_top__DOT__ram_real_awready;
+    __Vdlyvset__pcie_axi_top__DOT__u_ram__DOT__mem__v0 = 0U;
+    __Vdlyvset__pcie_axi_top__DOT__u_ram__DOT__mem__v1 = 0U;
+    __Vdlyvset__pcie_axi_top__DOT__u_ram__DOT__mem__v2 = 0U;
+    __Vdlyvset__pcie_axi_top__DOT__u_ram__DOT__mem__v3 = 0U;
+    __Vdlyvset__pcie_axi_top__DOT__u_ram__DOT__mem__v4 = 0U;
+    __Vdlyvset__pcie_axi_top__DOT__u_ram__DOT__mem__v5 = 0U;
+    __Vdlyvset__pcie_axi_top__DOT__u_ram__DOT__mem__v6 = 0U;
+    __Vdlyvset__pcie_axi_top__DOT__u_ram__DOT__mem__v7 = 0U;
+    __Vdly__pcie_axi_top__DOT__dma_rvalid = vlSelf->pcie_axi_top__DOT__dma_rvalid;
+    __Vdly__pcie_axi_top__DOT__dma_rdata = vlSelf->pcie_axi_top__DOT__dma_rdata;
+    __Vdly__pcie_axi_top__DOT__dma_bvalid = vlSelf->pcie_axi_top__DOT__dma_bvalid;
+    __Vdly__pcie_axi_top__DOT__u_dma__DOT__length_reg 
+        = vlSelf->pcie_axi_top__DOT__u_dma__DOT__length_reg;
+    __Vdly__pcie_axi_top__DOT__u_dma__DOT__local_addr 
+        = vlSelf->pcie_axi_top__DOT__u_dma__DOT__local_addr;
+    __Vdly__pcie_axi_top__DOT__u_dma__DOT__host_addr_hi 
+        = vlSelf->pcie_axi_top__DOT__u_dma__DOT__host_addr_hi;
+    __Vdly__pcie_axi_top__DOT__u_dma__DOT__host_addr_lo 
+        = vlSelf->pcie_axi_top__DOT__u_dma__DOT__host_addr_lo;
+    __Vdly__pcie_axi_top__DOT__u_dma__DOT__ctrl_reg 
+        = vlSelf->pcie_axi_top__DOT__u_dma__DOT__ctrl_reg;
     if (vlSelf->rst_n) {
         if (vlSelf->pcie_axi_top__DOT__ram_busy) {
             if ((((IData)(vlSelf->pcie_axi_top__DOT__ram_real_bvalid) 
@@ -459,18 +436,46 @@ VL_INLINE_OPT void Vpcie_axi_top___024root___nba_sequent__TOP__0(Vpcie_axi_top__
             vlSelf->pcie_axi_top__DOT__ram_busy = 1U;
             __Vdly__pcie_axi_top__DOT__ram_owner = 1U;
         }
+        if ((4U & (IData)(vlSelf->tx_dcrdt_update))) {
+            __Vdly__pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_data_cnt 
+                = (0xfffffU & (vlSelf->pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_data_cnt 
+                               + (IData)(vlSelf->tx_dcrdt_update_cnt)));
+        }
+        if (((IData)(vlSelf->pcie_axi_top__DOT__u_bridge__DOT__tx_cpl_data_dec) 
+             & (1U <= vlSelf->pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_data_cnt))) {
+            __Vdly__pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_data_cnt 
+                = (0xfffffU & (vlSelf->pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_data_cnt 
+                               - (IData)(1U)));
+        }
+        if ((4U & (IData)(vlSelf->tx_hcrdt_update))) {
+            __Vdly__pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_hdr_cnt 
+                = (0xffffU & ((IData)(vlSelf->pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_hdr_cnt) 
+                              + (IData)(vlSelf->tx_hcrdt_update_cnt)));
+        }
+        if (((IData)(vlSelf->pcie_axi_top__DOT__u_bridge__DOT__tx_cpl_hdr_dec) 
+             & (0U < (IData)(vlSelf->pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_hdr_cnt)))) {
+            __Vdly__pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_hdr_cnt 
+                = (0xffffU & ((IData)(vlSelf->pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_hdr_cnt) 
+                              - (IData)(1U)));
+        }
         if ((((IData)(vlSelf->pcie_axi_top__DOT__ram_owner)
                ? (IData)(vlSelf->pcie_axi_top__DOT__dma_ram_arvalid)
                : (IData)(vlSelf->pcie_axi_top__DOT__ram_arvalid)) 
              & (IData)(vlSelf->pcie_axi_top__DOT__ram_real_arready))) {
+            __Vdly__pcie_axi_top__DOT__u_ram__DOT__rd_addr_latched 
+                = (0x1ffU & (((IData)(vlSelf->pcie_axi_top__DOT__ram_owner)
+                               ? vlSelf->pcie_axi_top__DOT__dma_ram_araddr
+                               : vlSelf->pcie_axi_top__DOT__brg_araddr) 
+                             >> 3U));
+            __Vdly__pcie_axi_top__DOT__ram_real_arready = 0U;
+            __Vdly__pcie_axi_top__DOT__u_ram__DOT__read_pending = 1U;
+        }
+        if (vlSelf->pcie_axi_top__DOT__u_ram__DOT__read_pending) {
             __Vdly__pcie_axi_top__DOT__ram_real_rdata 
                 = vlSelf->pcie_axi_top__DOT__u_ram__DOT__mem
-                [(0x1ffU & (((IData)(vlSelf->pcie_axi_top__DOT__ram_owner)
-                              ? vlSelf->pcie_axi_top__DOT__dma_ram_araddr
-                              : vlSelf->pcie_axi_top__DOT__brg_araddr) 
-                            >> 3U))];
-            __Vdly__pcie_axi_top__DOT__ram_real_arready = 0U;
+                [vlSelf->pcie_axi_top__DOT__u_ram__DOT__rd_addr_latched];
             __Vdly__pcie_axi_top__DOT__ram_real_rvalid = 1U;
+            __Vdly__pcie_axi_top__DOT__u_ram__DOT__read_pending = 0U;
         }
         if (((IData)(vlSelf->pcie_axi_top__DOT__ram_real_rvalid) 
              & (IData)(vlSelf->pcie_axi_top__DOT__ram_real_rready))) {
@@ -483,8 +488,8 @@ VL_INLINE_OPT void Vpcie_axi_top___024root___nba_sequent__TOP__0(Vpcie_axi_top__
               & ((IData)(vlSelf->pcie_axi_top__DOT__ram_owner)
                   ? (IData)(vlSelf->pcie_axi_top__DOT__dma_ram_wvalid)
                   : ((IData)(vlSelf->pcie_axi_top__DOT__brg_wvalid) 
-                     & (0x2000U == (0x3000U & vlSelf->pcie_axi_top__DOT__brg_awaddr))))) 
-             & (IData)(vlSelf->pcie_axi_top__DOT__ram_real_awready))) {
+                     & (vlSelf->pcie_axi_top__DOT__brg_awaddr 
+                        >> 0xcU)))) & (IData)(vlSelf->pcie_axi_top__DOT__ram_real_awready))) {
             vlSelf->pcie_axi_top__DOT__u_ram__DOT__unnamedblk1__DOT__i = 8U;
             if ((1U & (IData)(vlSelf->pcie_axi_top__DOT__ram_real_wstrb))) {
                 __Vdlyvval__pcie_axi_top__DOT__u_ram__DOT__mem__v0 
@@ -591,27 +596,31 @@ VL_INLINE_OPT void Vpcie_axi_top___024root___nba_sequent__TOP__0(Vpcie_axi_top__
             __Vdly__pcie_axi_top__DOT__ram_real_awready = 1U;
             __Vdly__pcie_axi_top__DOT__ram_real_wready = 1U;
         }
-        if ((4U & (IData)(vlSelf->tx_dcrdt_update))) {
-            __Vdly__pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_data_cnt 
-                = (0xfffffU & (vlSelf->pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_data_cnt 
-                               + (IData)(vlSelf->tx_dcrdt_update_cnt)));
+        if ((((~ (vlSelf->pcie_axi_top__DOT__brg_araddr 
+                  >> 0xcU)) & (IData)(vlSelf->pcie_axi_top__DOT__brg_arvalid)) 
+             & (IData)(vlSelf->pcie_axi_top__DOT__dma_arready))) {
+            __Vdly__pcie_axi_top__DOT__dma_rdata = 
+                ((0U == (0xffU & vlSelf->pcie_axi_top__DOT__brg_araddr))
+                  ? (QData)((IData)(vlSelf->pcie_axi_top__DOT__u_dma__DOT__ctrl_reg))
+                  : ((8U == (0xffU & vlSelf->pcie_axi_top__DOT__brg_araddr))
+                      ? (QData)((IData)(vlSelf->pcie_axi_top__DOT__u_dma__DOT__status_reg))
+                      : ((0x10U == (0xffU & vlSelf->pcie_axi_top__DOT__brg_araddr))
+                          ? (QData)((IData)(vlSelf->pcie_axi_top__DOT__u_dma__DOT__host_addr_lo))
+                          : ((0x18U == (0xffU & vlSelf->pcie_axi_top__DOT__brg_araddr))
+                              ? (QData)((IData)(vlSelf->pcie_axi_top__DOT__u_dma__DOT__host_addr_hi))
+                              : ((0x20U == (0xffU & vlSelf->pcie_axi_top__DOT__brg_araddr))
+                                  ? (QData)((IData)(vlSelf->pcie_axi_top__DOT__u_dma__DOT__local_addr))
+                                  : ((0x28U == (0xffU 
+                                                & vlSelf->pcie_axi_top__DOT__brg_araddr))
+                                      ? (QData)((IData)(vlSelf->pcie_axi_top__DOT__u_dma__DOT__length_reg))
+                                      : 0xdeaddeadULL))))));
+            vlSelf->pcie_axi_top__DOT__dma_arready = 0U;
+            __Vdly__pcie_axi_top__DOT__dma_rvalid = 1U;
         }
-        if (((IData)(vlSelf->pcie_axi_top__DOT__u_bridge__DOT__tx_cpl_data_dec) 
-             & (1U <= vlSelf->pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_data_cnt))) {
-            __Vdly__pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_data_cnt 
-                = (0xfffffU & (vlSelf->pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_data_cnt 
-                               - (IData)(1U)));
-        }
-        if ((4U & (IData)(vlSelf->tx_hcrdt_update))) {
-            __Vdly__pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_hdr_cnt 
-                = (0xffffU & ((IData)(vlSelf->pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_hdr_cnt) 
-                              + (IData)(vlSelf->tx_hcrdt_update_cnt)));
-        }
-        if (((IData)(vlSelf->pcie_axi_top__DOT__u_bridge__DOT__tx_cpl_hdr_dec) 
-             & (0U < (IData)(vlSelf->pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_hdr_cnt)))) {
-            __Vdly__pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_hdr_cnt 
-                = (0xffffU & ((IData)(vlSelf->pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_hdr_cnt) 
-                              - (IData)(1U)));
+        if (((IData)(vlSelf->pcie_axi_top__DOT__dma_rvalid) 
+             & (IData)(vlSelf->pcie_axi_top__DOT__brg_rready))) {
+            __Vdly__pcie_axi_top__DOT__dma_rvalid = 0U;
+            vlSelf->pcie_axi_top__DOT__dma_arready = 1U;
         }
         vlSelf->tx_hcrdt_init_ack = vlSelf->tx_hcrdt_init;
         vlSelf->tx_dcrdt_init_ack = vlSelf->tx_dcrdt_init;
@@ -620,8 +629,8 @@ VL_INLINE_OPT void Vpcie_axi_top___024root___nba_sequent__TOP__0(Vpcie_axi_top__
             __Vdly__pcie_axi_top__DOT__u_dma__DOT__ctrl_reg 
                 = (0xfffffffeU & __Vdly__pcie_axi_top__DOT__u_dma__DOT__ctrl_reg);
         }
-        if (((((IData)(vlSelf->pcie_axi_top__DOT__brg_awvalid) 
-               & (0x1000U == (0x3000U & vlSelf->pcie_axi_top__DOT__brg_awaddr))) 
+        if (((((~ (vlSelf->pcie_axi_top__DOT__brg_awaddr 
+                   >> 0xcU)) & (IData)(vlSelf->pcie_axi_top__DOT__brg_awvalid)) 
               & (IData)(vlSelf->pcie_axi_top__DOT__brg_wvalid)) 
              & (IData)(vlSelf->pcie_axi_top__DOT__dma_awready))) {
             if ((0U == (0xffU & vlSelf->pcie_axi_top__DOT__brg_awaddr))) {
@@ -669,10 +678,10 @@ VL_INLINE_OPT void Vpcie_axi_top___024root___nba_sequent__TOP__0(Vpcie_axi_top__
                 vlSelf->tx_st_eop = 0U;
                 if (((IData)(vlSelf->pcie_axi_top__DOT__u_bridge__DOT__rx_is_mwr) 
                      & (0U == (IData)(vlSelf->rx_st_bar)))) {
-                    __Vdly__pcie_axi_top__DOT__brg_awaddr 
+                    vlSelf->pcie_axi_top__DOT__brg_awaddr 
                         = (IData)(vlSelf->pcie_axi_top__DOT__u_bridge__DOT__rx_addr);
                     __Vdly__pcie_axi_top__DOT__brg_awvalid = 1U;
-                    __Vdly__pcie_axi_top__DOT__brg_wdata 
+                    vlSelf->pcie_axi_top__DOT__brg_wdata 
                         = (((QData)((IData)(vlSelf->rx_st_data[1U])) 
                             << 0x20U) | (QData)((IData)(
                                                         vlSelf->rx_st_data[0U])));
@@ -689,9 +698,9 @@ VL_INLINE_OPT void Vpcie_axi_top___024root___nba_sequent__TOP__0(Vpcie_axi_top__
                         = vlSelf->pcie_axi_top__DOT__u_bridge__DOT__rx_tag;
                     __Vdly__pcie_axi_top__DOT__u_bridge__DOT__bar_req_lower_addr 
                         = (0x7fU & (IData)(vlSelf->pcie_axi_top__DOT__u_bridge__DOT__rx_addr));
-                    __Vdly__pcie_axi_top__DOT__brg_araddr 
+                    vlSelf->pcie_axi_top__DOT__brg_araddr 
                         = (IData)(vlSelf->pcie_axi_top__DOT__u_bridge__DOT__rx_addr);
-                    __Vdly__pcie_axi_top__DOT__brg_arvalid = 1U;
+                    vlSelf->pcie_axi_top__DOT__brg_arvalid = 1U;
                     __Vdly__pcie_axi_top__DOT__u_bridge__DOT__state = 3U;
                 } else if (vlSelf->pcie_axi_top__DOT__dma_mrd_valid) {
                     __Vdly__pcie_axi_top__DOT__u_bridge__DOT__state = 6U;
@@ -703,7 +712,7 @@ VL_INLINE_OPT void Vpcie_axi_top___024root___nba_sequent__TOP__0(Vpcie_axi_top__
                             | (~ (IData)(vlSelf->pcie_axi_top__DOT__brg_awvalid))) 
                            & ((IData)(vlSelf->pcie_axi_top__DOT__brg_wready) 
                               | (~ (IData)(vlSelf->pcie_axi_top__DOT__brg_wvalid)))))) {
-                    __Vdly__pcie_axi_top__DOT__brg_bready = 1U;
+                    vlSelf->pcie_axi_top__DOT__brg_bready = 1U;
                     __Vdly__pcie_axi_top__DOT__u_bridge__DOT__state = 2U;
                 }
                 if (vlSelf->pcie_axi_top__DOT__brg_awready) {
@@ -713,31 +722,24 @@ VL_INLINE_OPT void Vpcie_axi_top___024root___nba_sequent__TOP__0(Vpcie_axi_top__
                     __Vdly__pcie_axi_top__DOT__brg_wvalid = 0U;
                 }
             } else if ((2U == (IData)(vlSelf->pcie_axi_top__DOT__u_bridge__DOT__state))) {
-                if (((IData)(vlSelf->pcie_axi_top__DOT__reg_bvalid) 
-                     | ((IData)(vlSelf->pcie_axi_top__DOT__dma_bvalid) 
-                        | ((~ (IData)(vlSelf->pcie_axi_top__DOT__ram_owner)) 
-                           & (IData)(vlSelf->pcie_axi_top__DOT__ram_real_bvalid))))) {
-                    __Vdly__pcie_axi_top__DOT__brg_bready = 0U;
+                if (((IData)(vlSelf->pcie_axi_top__DOT__dma_bvalid) 
+                     | ((~ (IData)(vlSelf->pcie_axi_top__DOT__ram_owner)) 
+                        & (IData)(vlSelf->pcie_axi_top__DOT__ram_real_bvalid)))) {
+                    vlSelf->pcie_axi_top__DOT__brg_bready = 0U;
                     __Vdly__pcie_axi_top__DOT__u_bridge__DOT__state = 0U;
                 }
             } else if ((3U == (IData)(vlSelf->pcie_axi_top__DOT__u_bridge__DOT__state))) {
                 if (vlSelf->pcie_axi_top__DOT__brg_arready) {
-                    __Vdly__pcie_axi_top__DOT__brg_arvalid = 0U;
-                    __Vdly__pcie_axi_top__DOT__brg_rready = 1U;
+                    vlSelf->pcie_axi_top__DOT__brg_arvalid = 0U;
+                    vlSelf->pcie_axi_top__DOT__brg_rready = 1U;
                     __Vdly__pcie_axi_top__DOT__u_bridge__DOT__state = 4U;
                 }
             } else if ((4U == (IData)(vlSelf->pcie_axi_top__DOT__u_bridge__DOT__state))) {
-                if (((IData)(vlSelf->pcie_axi_top__DOT__reg_rvalid) 
-                     | ((IData)(vlSelf->pcie_axi_top__DOT__dma_rvalid) 
-                        | ((~ (IData)(vlSelf->pcie_axi_top__DOT__ram_owner)) 
-                           & (IData)(vlSelf->pcie_axi_top__DOT__ram_real_rvalid))))) {
-                    __Vdly__pcie_axi_top__DOT__brg_rready = 0U;
-                    if (vlSelf->pcie_axi_top__DOT__reg_rvalid) {
-                        __Vdly__pcie_axi_top__DOT__u_bridge__DOT__bar_cpl_data 
-                            = vlSelf->pcie_axi_top__DOT__reg_rdata;
-                        __Vdly__pcie_axi_top__DOT__u_bridge__DOT__bar_cpl_status 
-                            = vlSelf->pcie_axi_top__DOT__reg_rresp;
-                    } else if (vlSelf->pcie_axi_top__DOT__dma_rvalid) {
+                if (((IData)(vlSelf->pcie_axi_top__DOT__dma_rvalid) 
+                     | ((~ (IData)(vlSelf->pcie_axi_top__DOT__ram_owner)) 
+                        & (IData)(vlSelf->pcie_axi_top__DOT__ram_real_rvalid)))) {
+                    vlSelf->pcie_axi_top__DOT__brg_rready = 0U;
+                    if (vlSelf->pcie_axi_top__DOT__dma_rvalid) {
                         __Vdly__pcie_axi_top__DOT__u_bridge__DOT__bar_cpl_data 
                             = vlSelf->pcie_axi_top__DOT__dma_rdata;
                         __Vdly__pcie_axi_top__DOT__u_bridge__DOT__bar_cpl_status 
@@ -848,96 +850,6 @@ VL_INLINE_OPT void Vpcie_axi_top___024root___nba_sequent__TOP__0(Vpcie_axi_top__
                 vlSelf->pcie_axi_top__DOT__u_bridge__DOT__tx_data_r 
                     = vlSelf->pcie_axi_top__DOT__dma_mwr_data;
                 __Vdly__pcie_axi_top__DOT__u_bridge__DOT__state = 0U;
-            }
-        }
-        if ((0U == (IData)(vlSelf->pcie_axi_top__DOT__u_regs__DOT__rd_state))) {
-            vlSelf->pcie_axi_top__DOT__reg_arready = 1U;
-            if (((IData)(vlSelf->pcie_axi_top__DOT__brg_arvalid) 
-                 & (0U == (0x3000U & vlSelf->pcie_axi_top__DOT__brg_araddr)))) {
-                vlSelf->pcie_axi_top__DOT__reg_arready = 0U;
-                vlSelf->pcie_axi_top__DOT__reg_rdata 
-                    = ((0U == (0xfffU & vlSelf->pcie_axi_top__DOT__brg_araddr))
-                        ? vlSelf->pcie_axi_top__DOT__u_regs__DOT__scratch_reg
-                        : ((8U == (0xfffU & vlSelf->pcie_axi_top__DOT__brg_araddr))
-                            ? (QData)((IData)(vlSelf->pcie_axi_top__DOT__u_regs__DOT__write_cnt))
-                            : 0xffffffffffffffffULL));
-                vlSelf->pcie_axi_top__DOT__reg_rvalid = 1U;
-                vlSelf->pcie_axi_top__DOT__reg_rresp = 0U;
-                __Vdly__pcie_axi_top__DOT__u_regs__DOT__rd_state = 1U;
-            }
-        } else if ((1U == (IData)(vlSelf->pcie_axi_top__DOT__u_regs__DOT__rd_state))) {
-            if (vlSelf->pcie_axi_top__DOT__brg_rready) {
-                vlSelf->pcie_axi_top__DOT__reg_rvalid = 0U;
-                __Vdly__pcie_axi_top__DOT__u_regs__DOT__rd_state = 0U;
-            }
-        }
-        if ((((IData)(vlSelf->pcie_axi_top__DOT__brg_arvalid) 
-              & (0x1000U == (0x3000U & vlSelf->pcie_axi_top__DOT__brg_araddr))) 
-             & (IData)(vlSelf->pcie_axi_top__DOT__dma_arready))) {
-            vlSelf->pcie_axi_top__DOT__dma_rdata = 
-                ((0U == (0xffU & vlSelf->pcie_axi_top__DOT__brg_araddr))
-                  ? (QData)((IData)(vlSelf->pcie_axi_top__DOT__u_dma__DOT__ctrl_reg))
-                  : ((8U == (0xffU & vlSelf->pcie_axi_top__DOT__brg_araddr))
-                      ? (QData)((IData)(vlSelf->pcie_axi_top__DOT__u_dma__DOT__status_reg))
-                      : ((0x10U == (0xffU & vlSelf->pcie_axi_top__DOT__brg_araddr))
-                          ? (QData)((IData)(vlSelf->pcie_axi_top__DOT__u_dma__DOT__host_addr_lo))
-                          : ((0x18U == (0xffU & vlSelf->pcie_axi_top__DOT__brg_araddr))
-                              ? (QData)((IData)(vlSelf->pcie_axi_top__DOT__u_dma__DOT__host_addr_hi))
-                              : ((0x20U == (0xffU & vlSelf->pcie_axi_top__DOT__brg_araddr))
-                                  ? (QData)((IData)(vlSelf->pcie_axi_top__DOT__u_dma__DOT__local_addr))
-                                  : ((0x28U == (0xffU 
-                                                & vlSelf->pcie_axi_top__DOT__brg_araddr))
-                                      ? (QData)((IData)(vlSelf->pcie_axi_top__DOT__u_dma__DOT__length_reg))
-                                      : 0xdeaddeadULL))))));
-            vlSelf->pcie_axi_top__DOT__dma_arready = 0U;
-            __Vdly__pcie_axi_top__DOT__dma_rvalid = 1U;
-        }
-        if (((IData)(vlSelf->pcie_axi_top__DOT__dma_rvalid) 
-             & (IData)(vlSelf->pcie_axi_top__DOT__brg_rready))) {
-            __Vdly__pcie_axi_top__DOT__dma_rvalid = 0U;
-            vlSelf->pcie_axi_top__DOT__dma_arready = 1U;
-        }
-        if ((0U == (IData)(vlSelf->pcie_axi_top__DOT__u_regs__DOT__wr_state))) {
-            vlSelf->pcie_axi_top__DOT__reg_awready = 1U;
-            vlSelf->pcie_axi_top__DOT__reg_wready = 1U;
-            if (((IData)(vlSelf->pcie_axi_top__DOT__reg_awvalid) 
-                 & (IData)(vlSelf->pcie_axi_top__DOT__reg_wvalid))) {
-                __Vdly__pcie_axi_top__DOT__u_regs__DOT__write_cnt 
-                    = ((IData)(1U) + vlSelf->pcie_axi_top__DOT__u_regs__DOT__write_cnt);
-                __Vdly__pcie_axi_top__DOT__u_regs__DOT__wr_addr 
-                    = vlSelf->pcie_axi_top__DOT__brg_awaddr;
-                vlSelf->pcie_axi_top__DOT__reg_awready = 0U;
-                vlSelf->pcie_axi_top__DOT__reg_wready = 0U;
-                if ((0U == (0xfffU & vlSelf->pcie_axi_top__DOT__brg_awaddr))) {
-                    vlSelf->pcie_axi_top__DOT__u_regs__DOT__scratch_reg 
-                        = vlSelf->pcie_axi_top__DOT__brg_wdata;
-                }
-                vlSelf->pcie_axi_top__DOT__reg_bvalid = 1U;
-                vlSelf->pcie_axi_top__DOT__reg_bresp = 0U;
-                __Vdly__pcie_axi_top__DOT__u_regs__DOT__wr_state = 2U;
-            } else if (vlSelf->pcie_axi_top__DOT__reg_awvalid) {
-                __Vdly__pcie_axi_top__DOT__u_regs__DOT__wr_addr 
-                    = vlSelf->pcie_axi_top__DOT__brg_awaddr;
-                vlSelf->pcie_axi_top__DOT__reg_awready = 0U;
-                __Vdly__pcie_axi_top__DOT__u_regs__DOT__wr_state = 1U;
-            }
-        } else if ((1U == (IData)(vlSelf->pcie_axi_top__DOT__u_regs__DOT__wr_state))) {
-            if (vlSelf->pcie_axi_top__DOT__reg_wvalid) {
-                __Vdly__pcie_axi_top__DOT__u_regs__DOT__write_cnt 
-                    = ((IData)(1U) + vlSelf->pcie_axi_top__DOT__u_regs__DOT__write_cnt);
-                vlSelf->pcie_axi_top__DOT__reg_wready = 0U;
-                if ((0U == (0xfffU & vlSelf->pcie_axi_top__DOT__u_regs__DOT__wr_addr))) {
-                    vlSelf->pcie_axi_top__DOT__u_regs__DOT__scratch_reg 
-                        = vlSelf->pcie_axi_top__DOT__brg_wdata;
-                }
-                vlSelf->pcie_axi_top__DOT__reg_bvalid = 1U;
-                vlSelf->pcie_axi_top__DOT__reg_bresp = 0U;
-                __Vdly__pcie_axi_top__DOT__u_regs__DOT__wr_state = 2U;
-            }
-        } else if ((2U == (IData)(vlSelf->pcie_axi_top__DOT__u_regs__DOT__wr_state))) {
-            if (vlSelf->pcie_axi_top__DOT__brg_bready) {
-                vlSelf->pcie_axi_top__DOT__reg_bvalid = 0U;
-                __Vdly__pcie_axi_top__DOT__u_regs__DOT__wr_state = 0U;
             }
         }
         vlSelf->dma_irq = 0U;
@@ -1087,14 +999,19 @@ VL_INLINE_OPT void Vpcie_axi_top___024root___nba_sequent__TOP__0(Vpcie_axi_top__
     } else {
         vlSelf->pcie_axi_top__DOT__ram_busy = 0U;
         __Vdly__pcie_axi_top__DOT__ram_owner = 0U;
+        __Vdly__pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_data_cnt = 0U;
+        __Vdly__pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_hdr_cnt = 0U;
         __Vdly__pcie_axi_top__DOT__ram_real_rvalid = 0U;
+        __Vdly__pcie_axi_top__DOT__u_ram__DOT__read_pending = 0U;
         __Vdly__pcie_axi_top__DOT__ram_real_arready = 1U;
         __Vdly__pcie_axi_top__DOT__ram_real_rdata = 0ULL;
+        __Vdly__pcie_axi_top__DOT__u_ram__DOT__rd_addr_latched = 0U;
         __Vdly__pcie_axi_top__DOT__ram_real_bvalid = 0U;
         __Vdly__pcie_axi_top__DOT__ram_real_awready = 1U;
         __Vdly__pcie_axi_top__DOT__ram_real_wready = 1U;
-        __Vdly__pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_data_cnt = 0U;
-        __Vdly__pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_hdr_cnt = 0U;
+        __Vdly__pcie_axi_top__DOT__dma_rvalid = 0U;
+        vlSelf->pcie_axi_top__DOT__dma_arready = 1U;
+        __Vdly__pcie_axi_top__DOT__dma_rdata = 0ULL;
         vlSelf->tx_hcrdt_init_ack = 0U;
         vlSelf->tx_dcrdt_init_ack = 0U;
         __Vdly__pcie_axi_top__DOT__dma_bvalid = 0U;
@@ -1108,9 +1025,9 @@ VL_INLINE_OPT void Vpcie_axi_top___024root___nba_sequent__TOP__0(Vpcie_axi_top__
         __Vdly__pcie_axi_top__DOT__u_bridge__DOT__state = 0U;
         __Vdly__pcie_axi_top__DOT__brg_awvalid = 0U;
         __Vdly__pcie_axi_top__DOT__brg_wvalid = 0U;
-        __Vdly__pcie_axi_top__DOT__brg_bready = 0U;
-        __Vdly__pcie_axi_top__DOT__brg_arvalid = 0U;
-        __Vdly__pcie_axi_top__DOT__brg_rready = 0U;
+        vlSelf->pcie_axi_top__DOT__brg_bready = 0U;
+        vlSelf->pcie_axi_top__DOT__brg_arvalid = 0U;
+        vlSelf->pcie_axi_top__DOT__brg_rready = 0U;
         __Vdly__tx_st_hvalid = 0U;
         vlSelf->tx_st_dvalid = 0U;
         vlSelf->tx_st_sop = 0U;
@@ -1119,21 +1036,6 @@ VL_INLINE_OPT void Vpcie_axi_top___024root___nba_sequent__TOP__0(Vpcie_axi_top__
         vlSelf->pcie_axi_top__DOT__u_bridge__DOT__tx_cpl_data_dec = 0U;
         __Vdly__pcie_axi_top__DOT__dma_mrd_ready = 0U;
         __Vdly__pcie_axi_top__DOT__dma_mwr_ready = 0U;
-        __Vdly__pcie_axi_top__DOT__u_regs__DOT__rd_state = 0U;
-        vlSelf->pcie_axi_top__DOT__reg_arready = 0U;
-        vlSelf->pcie_axi_top__DOT__reg_rvalid = 0U;
-        vlSelf->pcie_axi_top__DOT__reg_rresp = 0U;
-        vlSelf->pcie_axi_top__DOT__reg_rdata = 0ULL;
-        __Vdly__pcie_axi_top__DOT__dma_rvalid = 0U;
-        vlSelf->pcie_axi_top__DOT__dma_arready = 1U;
-        vlSelf->pcie_axi_top__DOT__dma_rdata = 0ULL;
-        __Vdly__pcie_axi_top__DOT__u_regs__DOT__write_cnt = 0U;
-        __Vdly__pcie_axi_top__DOT__u_regs__DOT__wr_state = 0U;
-        vlSelf->pcie_axi_top__DOT__reg_awready = 0U;
-        vlSelf->pcie_axi_top__DOT__reg_wready = 0U;
-        vlSelf->pcie_axi_top__DOT__reg_bvalid = 0U;
-        vlSelf->pcie_axi_top__DOT__reg_bresp = 0U;
-        vlSelf->pcie_axi_top__DOT__u_regs__DOT__scratch_reg = 0xdeadbeefcafebabeULL;
         __Vdly__pcie_axi_top__DOT__u_dma__DOT__dma_state = 0U;
         vlSelf->pcie_axi_top__DOT__u_dma__DOT__status_reg = 0U;
         __Vdly__pcie_axi_top__DOT__u_dma__DOT__bytes_remaining = 0U;
@@ -1188,6 +1090,14 @@ VL_INLINE_OPT void Vpcie_axi_top___024root___nba_sequent__TOP__0(Vpcie_axi_top__
             = Vpcie_axi_top__ConstPool__TABLE_h643f69a8_0
             [__Vtableidx1];
     }
+    vlSelf->pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_data_cnt 
+        = __Vdly__pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_data_cnt;
+    vlSelf->pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_hdr_cnt 
+        = __Vdly__pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_hdr_cnt;
+    vlSelf->pcie_axi_top__DOT__u_ram__DOT__rd_addr_latched 
+        = __Vdly__pcie_axi_top__DOT__u_ram__DOT__rd_addr_latched;
+    vlSelf->pcie_axi_top__DOT__u_ram__DOT__read_pending 
+        = __Vdly__pcie_axi_top__DOT__u_ram__DOT__read_pending;
     if (__Vdlyvset__pcie_axi_top__DOT__u_ram__DOT__mem__v0) {
         vlSelf->pcie_axi_top__DOT__u_ram__DOT__mem[__Vdlyvdim0__pcie_axi_top__DOT__u_ram__DOT__mem__v0] 
             = (((~ (0xffULL << (IData)(__Vdlyvlsb__pcie_axi_top__DOT__u_ram__DOT__mem__v0))) 
@@ -1252,12 +1162,9 @@ VL_INLINE_OPT void Vpcie_axi_top___024root___nba_sequent__TOP__0(Vpcie_axi_top__
                | ((QData)((IData)(__Vdlyvval__pcie_axi_top__DOT__u_ram__DOT__mem__v7)) 
                   << (IData)(__Vdlyvlsb__pcie_axi_top__DOT__u_ram__DOT__mem__v7)));
     }
-    vlSelf->pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_data_cnt 
-        = __Vdly__pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_data_cnt;
-    vlSelf->pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_hdr_cnt 
-        = __Vdly__pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_hdr_cnt;
     vlSelf->rx_dcrdt_update_cnt = ((3U == (IData)(vlSelf->pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__state))
                                     ? 0U : 0xfffU);
+    vlSelf->pcie_axi_top__DOT__dma_rdata = __Vdly__pcie_axi_top__DOT__dma_rdata;
     vlSelf->tx_st_hvalid = __Vdly__tx_st_hvalid;
     vlSelf->pcie_axi_top__DOT__u_bridge__DOT__state 
         = __Vdly__pcie_axi_top__DOT__u_bridge__DOT__state;
@@ -1268,6 +1175,7 @@ VL_INLINE_OPT void Vpcie_axi_top___024root___nba_sequent__TOP__0(Vpcie_axi_top__
     vlSelf->pcie_axi_top__DOT__u_bridge__DOT__bar_req_lower_addr 
         = __Vdly__pcie_axi_top__DOT__u_bridge__DOT__bar_req_lower_addr;
     vlSelf->pcie_axi_top__DOT__dma_bvalid = __Vdly__pcie_axi_top__DOT__dma_bvalid;
+    vlSelf->pcie_axi_top__DOT__dma_rvalid = __Vdly__pcie_axi_top__DOT__dma_rvalid;
     vlSelf->pcie_axi_top__DOT__u_bridge__DOT__bar_cpl_data 
         = __Vdly__pcie_axi_top__DOT__u_bridge__DOT__bar_cpl_data;
     vlSelf->pcie_axi_top__DOT__u_bridge__DOT__bar_cpl_status 
@@ -1287,26 +1195,12 @@ VL_INLINE_OPT void Vpcie_axi_top___024root___nba_sequent__TOP__0(Vpcie_axi_top__
     vlSelf->tx_st_data[5U] = 0U;
     vlSelf->tx_st_data[6U] = 0U;
     vlSelf->tx_st_data[7U] = 0U;
-    vlSelf->pcie_axi_top__DOT__u_regs__DOT__rd_state 
-        = __Vdly__pcie_axi_top__DOT__u_regs__DOT__rd_state;
-    vlSelf->pcie_axi_top__DOT__dma_rvalid = __Vdly__pcie_axi_top__DOT__dma_rvalid;
-    vlSelf->pcie_axi_top__DOT__brg_arvalid = __Vdly__pcie_axi_top__DOT__brg_arvalid;
-    vlSelf->pcie_axi_top__DOT__brg_rready = __Vdly__pcie_axi_top__DOT__brg_rready;
-    vlSelf->pcie_axi_top__DOT__brg_araddr = __Vdly__pcie_axi_top__DOT__brg_araddr;
     vlSelf->pcie_axi_top__DOT__ram_arvalid = ((IData)(vlSelf->pcie_axi_top__DOT__brg_arvalid) 
-                                              & (0x2000U 
-                                                 == 
-                                                 (0x3000U 
-                                                  & vlSelf->pcie_axi_top__DOT__brg_araddr)));
-    vlSelf->pcie_axi_top__DOT__u_regs__DOT__wr_addr 
-        = __Vdly__pcie_axi_top__DOT__u_regs__DOT__wr_addr;
-    vlSelf->pcie_axi_top__DOT__u_regs__DOT__wr_state 
-        = __Vdly__pcie_axi_top__DOT__u_regs__DOT__wr_state;
-    vlSelf->pcie_axi_top__DOT__u_regs__DOT__write_cnt 
-        = __Vdly__pcie_axi_top__DOT__u_regs__DOT__write_cnt;
-    vlSelf->pcie_axi_top__DOT__brg_wdata = __Vdly__pcie_axi_top__DOT__brg_wdata;
-    vlSelf->pcie_axi_top__DOT__brg_bready = __Vdly__pcie_axi_top__DOT__brg_bready;
-    vlSelf->pcie_axi_top__DOT__brg_awaddr = __Vdly__pcie_axi_top__DOT__brg_awaddr;
+                                              & (vlSelf->pcie_axi_top__DOT__brg_araddr 
+                                                 >> 0xcU));
+    vlSelf->pcie_axi_top__DOT__ram_awvalid = ((IData)(vlSelf->pcie_axi_top__DOT__brg_awvalid) 
+                                              & (vlSelf->pcie_axi_top__DOT__brg_awaddr 
+                                                 >> 0xcU));
     vlSelf->pcie_axi_top__DOT__dma_mrd_ready = __Vdly__pcie_axi_top__DOT__dma_mrd_ready;
     vlSelf->pcie_axi_top__DOT__dma_mwr_ready = __Vdly__pcie_axi_top__DOT__dma_mwr_ready;
     vlSelf->pcie_axi_top__DOT__u_dma__DOT__length_reg 
@@ -1338,23 +1232,6 @@ VL_INLINE_OPT void Vpcie_axi_top___024root___nba_sequent__TOP__0(Vpcie_axi_top__
     vlSelf->pcie_axi_top__DOT__ram_real_awready = __Vdly__pcie_axi_top__DOT__ram_real_awready;
     vlSelf->pcie_axi_top__DOT__ram_real_arready = __Vdly__pcie_axi_top__DOT__ram_real_arready;
     vlSelf->pcie_axi_top__DOT__ram_owner = __Vdly__pcie_axi_top__DOT__ram_owner;
-    vlSelf->write_count = vlSelf->pcie_axi_top__DOT__u_regs__DOT__write_cnt;
-    vlSelf->scratch_reg = vlSelf->pcie_axi_top__DOT__u_regs__DOT__scratch_reg;
-    vlSelf->pcie_axi_top__DOT__ram_awvalid = ((IData)(vlSelf->pcie_axi_top__DOT__brg_awvalid) 
-                                              & (0x2000U 
-                                                 == 
-                                                 (0x3000U 
-                                                  & vlSelf->pcie_axi_top__DOT__brg_awaddr)));
-    vlSelf->pcie_axi_top__DOT__reg_awvalid = ((IData)(vlSelf->pcie_axi_top__DOT__brg_awvalid) 
-                                              & (0U 
-                                                 == 
-                                                 (0x3000U 
-                                                  & vlSelf->pcie_axi_top__DOT__brg_awaddr)));
-    vlSelf->pcie_axi_top__DOT__reg_wvalid = ((IData)(vlSelf->pcie_axi_top__DOT__brg_wvalid) 
-                                             & (0U 
-                                                == 
-                                                (0x3000U 
-                                                 & vlSelf->pcie_axi_top__DOT__brg_awaddr)));
     vlSelf->pcie_axi_top__DOT__u_dma__DOT__start = 
         (1U & vlSelf->pcie_axi_top__DOT__u_dma__DOT__ctrl_reg);
     if (vlSelf->pcie_axi_top__DOT__ram_owner) {
@@ -1372,34 +1249,20 @@ VL_INLINE_OPT void Vpcie_axi_top___024root___nba_sequent__TOP__0(Vpcie_axi_top__
         vlSelf->pcie_axi_top__DOT__ram_real_wdata = vlSelf->pcie_axi_top__DOT__brg_wdata;
         vlSelf->pcie_axi_top__DOT__ram_real_wstrb = vlSelf->pcie_axi_top__DOT__brg_wstrb;
     }
-    if ((0U == (3U & (vlSelf->pcie_axi_top__DOT__brg_awaddr 
-                      >> 0xcU)))) {
-        vlSelf->pcie_axi_top__DOT__brg_awready = vlSelf->pcie_axi_top__DOT__reg_awready;
-        vlSelf->pcie_axi_top__DOT__brg_wready = vlSelf->pcie_axi_top__DOT__reg_wready;
-    } else if ((1U == (3U & (vlSelf->pcie_axi_top__DOT__brg_awaddr 
-                             >> 0xcU)))) {
-        vlSelf->pcie_axi_top__DOT__brg_awready = vlSelf->pcie_axi_top__DOT__dma_awready;
-        vlSelf->pcie_axi_top__DOT__brg_wready = vlSelf->pcie_axi_top__DOT__dma_wready;
-    } else {
+    if ((0x1000U & vlSelf->pcie_axi_top__DOT__brg_awaddr)) {
         vlSelf->pcie_axi_top__DOT__brg_awready = ((~ (IData)(vlSelf->pcie_axi_top__DOT__ram_owner)) 
                                                   & (IData)(vlSelf->pcie_axi_top__DOT__ram_real_awready));
         vlSelf->pcie_axi_top__DOT__brg_wready = ((~ (IData)(vlSelf->pcie_axi_top__DOT__ram_owner)) 
                                                  & (IData)(vlSelf->pcie_axi_top__DOT__ram_real_wready));
+    } else {
+        vlSelf->pcie_axi_top__DOT__brg_awready = vlSelf->pcie_axi_top__DOT__dma_awready;
+        vlSelf->pcie_axi_top__DOT__brg_wready = vlSelf->pcie_axi_top__DOT__dma_wready;
     }
-    vlSelf->pcie_axi_top__DOT__brg_arready = ((0U == 
-                                               (3U 
-                                                & (vlSelf->pcie_axi_top__DOT__brg_araddr 
-                                                   >> 0xcU)))
-                                               ? (IData)(vlSelf->pcie_axi_top__DOT__reg_arready)
-                                               : ((1U 
-                                                   == 
-                                                   (3U 
-                                                    & (vlSelf->pcie_axi_top__DOT__brg_araddr 
-                                                       >> 0xcU)))
-                                                   ? (IData)(vlSelf->pcie_axi_top__DOT__dma_arready)
-                                                   : 
-                                                  ((~ (IData)(vlSelf->pcie_axi_top__DOT__ram_owner)) 
-                                                   & (IData)(vlSelf->pcie_axi_top__DOT__ram_real_arready))));
+    vlSelf->pcie_axi_top__DOT__brg_arready = ((0x1000U 
+                                               & vlSelf->pcie_axi_top__DOT__brg_araddr)
+                                               ? ((~ (IData)(vlSelf->pcie_axi_top__DOT__ram_owner)) 
+                                                  & (IData)(vlSelf->pcie_axi_top__DOT__ram_real_arready))
+                                               : (IData)(vlSelf->pcie_axi_top__DOT__dma_arready));
 }
 
 void Vpcie_axi_top___024root___eval_triggers__act(Vpcie_axi_top___024root* vlSelf);
@@ -1465,7 +1328,7 @@ void Vpcie_axi_top___024root___eval(Vpcie_axi_top___024root* vlSelf) {
 #ifdef VL_DEBUG
             Vpcie_axi_top___024root___dump_triggers__ico(vlSelf);
 #endif
-            VL_FATAL_MT("../rtl/../rtl/pcie_axi_top.sv", 9, "", "Input combinational region did not converge.");
+            VL_FATAL_MT("../rtl/../rtl/pcie_axi_top.sv", 8, "", "Input combinational region did not converge.");
         }
         __VicoIterCount = ((IData)(1U) + __VicoIterCount);
         __VicoContinue = 0U;
@@ -1481,7 +1344,7 @@ void Vpcie_axi_top___024root___eval(Vpcie_axi_top___024root* vlSelf) {
 #ifdef VL_DEBUG
             Vpcie_axi_top___024root___dump_triggers__nba(vlSelf);
 #endif
-            VL_FATAL_MT("../rtl/../rtl/pcie_axi_top.sv", 9, "", "NBA region did not converge.");
+            VL_FATAL_MT("../rtl/../rtl/pcie_axi_top.sv", 8, "", "NBA region did not converge.");
         }
         __VnbaIterCount = ((IData)(1U) + __VnbaIterCount);
         __VnbaContinue = 0U;
@@ -1492,7 +1355,7 @@ void Vpcie_axi_top___024root___eval(Vpcie_axi_top___024root* vlSelf) {
 #ifdef VL_DEBUG
                 Vpcie_axi_top___024root___dump_triggers__act(vlSelf);
 #endif
-                VL_FATAL_MT("../rtl/../rtl/pcie_axi_top.sv", 9, "", "Active region did not converge.");
+                VL_FATAL_MT("../rtl/../rtl/pcie_axi_top.sv", 8, "", "Active region did not converge.");
             }
             vlSelf->__VactIterCount = ((IData)(1U) 
                                        + vlSelf->__VactIterCount);
