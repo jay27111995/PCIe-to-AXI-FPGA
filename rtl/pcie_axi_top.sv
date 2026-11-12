@@ -2,9 +2,8 @@
 // pcie_axi_top.sv - PCIe-to-AXI System Top with DMA
 //
 // Memory map (BAR0):
-//   0x0000-0x0FFF: Control registers  
-//   0x1000-0x1FFF: DMA engine registers
-//   0x2000-0x2FFF: Local RAM (directly from BAR, DMA uses separate path)
+//   0x0000-0x0FFF: DMA engine registers
+//   0x1000-0x1FFF: Local RAM (4KB)
 //-----------------------------------------------------------------------------
 module pcie_axi_top
     import rtile_pkg::*;
@@ -45,8 +44,6 @@ module pcie_axi_top
     input  logic         link_up,
     input  logic [5:0]   ltssm_state,
 
-    output logic [63:0]  scratch_reg,
-    output logic [31:0]  write_count,
     output logic         dma_irq
 );
 
@@ -71,14 +68,7 @@ module pcie_axi_top
     logic [7:0] dma_cpl_tag;
     logic [63:0] dma_cpl_data;
 
-    // Slave buses
-    logic [31:0] reg_awaddr, reg_araddr;
-    logic [63:0] reg_wdata, reg_rdata;
-    logic [7:0] reg_wstrb;
-    logic [1:0] reg_bresp, reg_rresp;
-    logic reg_awvalid, reg_awready, reg_wvalid, reg_wready;
-    logic reg_bvalid, reg_bready, reg_arvalid, reg_arready, reg_rvalid, reg_rready;
-
+    // Slave buses - DMA control
     logic [31:0] dma_awaddr, dma_araddr;
     logic [63:0] dma_wdata, dma_rdata;
     logic [7:0] dma_wstrb;
@@ -86,6 +76,7 @@ module pcie_axi_top
     logic dma_awvalid, dma_awready, dma_wvalid, dma_wready;
     logic dma_bvalid, dma_bready, dma_arvalid, dma_arready, dma_rvalid, dma_rready;
 
+    // Slave buses - RAM (BAR access)
     logic [31:0] ram_awaddr, ram_araddr;
     logic [63:0] ram_wdata, ram_rdata;
     logic [7:0] ram_wstrb;
@@ -127,73 +118,54 @@ module pcie_axi_top
     );
 
     //=========================================================================
-    // Address Decode (simple, stateless for each slave)
-    // 0x0xxx=reg, 0x1xxx=dma, 0x2xxx=ram
+    // Address Decode: 0x0xxx=dma, 0x1xxx=ram
     //=========================================================================
-    wire [1:0] wr_sel = brg_awaddr[13:12];
-    wire [1:0] rd_sel = brg_araddr[13:12];
+    wire wr_sel = brg_awaddr[12];  // 0=DMA, 1=RAM
+    wire rd_sel = brg_araddr[12];
 
     // Fan out address/data to all slaves
-    assign reg_awaddr = brg_awaddr; assign reg_wdata = brg_wdata; assign reg_wstrb = brg_wstrb;
     assign dma_awaddr = brg_awaddr; assign dma_wdata = brg_wdata; assign dma_wstrb = brg_wstrb;
     assign ram_awaddr = brg_awaddr; assign ram_wdata = brg_wdata; assign ram_wstrb = brg_wstrb;
-    assign reg_araddr = brg_araddr;
     assign dma_araddr = brg_araddr;
     assign ram_araddr = brg_araddr;
 
     // Route valid based on address
-    assign reg_awvalid = brg_awvalid && (wr_sel == 2'b00);
-    assign reg_wvalid  = brg_wvalid  && (wr_sel == 2'b00);
-    assign dma_awvalid = brg_awvalid && (wr_sel == 2'b01);
-    assign dma_wvalid  = brg_wvalid  && (wr_sel == 2'b01);
-    assign ram_awvalid = brg_awvalid && (wr_sel == 2'b10);
-    assign ram_wvalid  = brg_wvalid  && (wr_sel == 2'b10);
+    assign dma_awvalid = brg_awvalid && !wr_sel;
+    assign dma_wvalid  = brg_wvalid  && !wr_sel;
+    assign ram_awvalid = brg_awvalid && wr_sel;
+    assign ram_wvalid  = brg_wvalid  && wr_sel;
 
-    assign reg_arvalid = brg_arvalid && (rd_sel == 2'b00);
-    assign dma_arvalid = brg_arvalid && (rd_sel == 2'b01);
-    assign ram_arvalid = brg_arvalid && (rd_sel == 2'b10);
+    assign dma_arvalid = brg_arvalid && !rd_sel;
+    assign ram_arvalid = brg_arvalid && rd_sel;
 
     // Mux ready back
-    assign brg_awready = (wr_sel == 2'b00) ? reg_awready : (wr_sel == 2'b01) ? dma_awready : ram_awready;
-    assign brg_wready  = (wr_sel == 2'b00) ? reg_wready  : (wr_sel == 2'b01) ? dma_wready  : ram_wready;
-    assign brg_arready = (rd_sel == 2'b00) ? reg_arready : (rd_sel == 2'b01) ? dma_arready : ram_arready;
+    assign brg_awready = wr_sel ? ram_awready : dma_awready;
+    assign brg_wready  = wr_sel ? ram_wready  : dma_wready;
+    assign brg_arready = rd_sel ? ram_arready : dma_arready;
 
     // Fan out bready/rready
-    assign reg_bready = brg_bready; assign dma_bready = brg_bready; assign ram_bready = brg_bready;
-    assign reg_rready = brg_rready; assign dma_rready = brg_rready; assign ram_rready = brg_rready;
+    assign dma_bready = brg_bready; assign ram_bready = brg_bready;
+    assign dma_rready = brg_rready; assign ram_rready = brg_rready;
 
     // Mux responses (only one should be valid at a time)
-    assign brg_bvalid = reg_bvalid | dma_bvalid | ram_bvalid;
-    assign brg_bresp  = reg_bvalid ? reg_bresp : dma_bvalid ? dma_bresp : ram_bresp;
-    assign brg_rvalid = reg_rvalid | dma_rvalid | ram_rvalid;
-    assign brg_rdata  = reg_rvalid ? reg_rdata : dma_rvalid ? dma_rdata : ram_rdata;
-    assign brg_rresp  = reg_rvalid ? reg_rresp : dma_rvalid ? dma_rresp : ram_rresp;
+    assign brg_bvalid = dma_bvalid | ram_bvalid;
+    assign brg_bresp  = dma_bvalid ? dma_bresp : ram_bresp;
+    assign brg_rvalid = dma_rvalid | ram_rvalid;
+    assign brg_rdata  = dma_rvalid ? dma_rdata : ram_rdata;
+    assign brg_rresp  = dma_rvalid ? dma_rresp : ram_rresp;
 
     //=========================================================================
-    // Registers
-    //=========================================================================
-    axi_regs #(.ADDR_W(32), .DATA_W(64)) u_regs (
-        .clk, .rst_n,
-        .s_axi_awaddr(reg_awaddr), .s_axi_awvalid(reg_awvalid), .s_axi_awready(reg_awready),
-        .s_axi_wdata(reg_wdata), .s_axi_wstrb(reg_wstrb), .s_axi_wvalid(reg_wvalid), .s_axi_wready(reg_wready),
-        .s_axi_bresp(reg_bresp), .s_axi_bvalid(reg_bvalid), .s_axi_bready(reg_bready),
-        .s_axi_araddr(reg_araddr), .s_axi_arvalid(reg_arvalid), .s_axi_arready(reg_arready),
-        .s_axi_rdata(reg_rdata), .s_axi_rresp(reg_rresp), .s_axi_rvalid(reg_rvalid), .s_axi_rready(reg_rready),
-        .scratch(scratch_reg), .write_count(write_count)
-    );
-
-    //=========================================================================
-    // DMA Engine (control via BAR, data via separate RAM port)
+    // DMA Engine
     //=========================================================================
     dma_engine #(.ADDR_W(32), .DATA_W(64)) u_dma (
         .clk, .rst_n,
-        // Control (BAR 0x1xxx)
+        // Control (BAR 0x0xxx)
         .s_axi_awaddr(dma_awaddr), .s_axi_awvalid(dma_awvalid), .s_axi_awready(dma_awready),
         .s_axi_wdata(dma_wdata), .s_axi_wstrb(dma_wstrb), .s_axi_wvalid(dma_wvalid), .s_axi_wready(dma_wready),
         .s_axi_bresp(dma_bresp), .s_axi_bvalid(dma_bvalid), .s_axi_bready(dma_bready),
         .s_axi_araddr(dma_araddr), .s_axi_arvalid(dma_arvalid), .s_axi_arready(dma_arready),
         .s_axi_rdata(dma_rdata), .s_axi_rresp(dma_rresp), .s_axi_rvalid(dma_rvalid), .s_axi_rready(dma_rready),
-        // RAM access (direct, not through BAR decoder)
+        // RAM access
         .m_axi_awaddr(dma_ram_awaddr), .m_axi_awvalid(dma_ram_awvalid), .m_axi_awready(dma_ram_awready),
         .m_axi_wdata(dma_ram_wdata), .m_axi_wstrb(dma_ram_wstrb), .m_axi_wvalid(dma_ram_wvalid), .m_axi_wready(dma_ram_wready),
         .m_axi_bresp(dma_ram_bresp), .m_axi_bvalid(dma_ram_bvalid), .m_axi_bready(dma_ram_bready),
@@ -209,12 +181,10 @@ module pcie_axi_top
     );
 
     //=========================================================================
-    // RAM with simple 2-port arbiter (BAR vs DMA)
+    // RAM with 2-port arbiter (BAR vs DMA)
     //=========================================================================
-    // Track who owns the RAM
     logic ram_busy, ram_owner;  // owner: 0=BAR, 1=DMA
     
-    // Actual RAM interface
     logic [31:0] ram_real_awaddr, ram_real_araddr;
     logic [63:0] ram_real_wdata, ram_real_rdata;
     logic [7:0] ram_real_wstrb;
@@ -223,14 +193,12 @@ module pcie_axi_top
     logic ram_real_bvalid, ram_real_bready, ram_real_arvalid, ram_real_arready;
     logic ram_real_rvalid, ram_real_rready;
 
-    // Arbiter FSM
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             ram_busy <= 0;
             ram_owner <= 0;
         end else begin
             if (!ram_busy) begin
-                // BAR has priority
                 if (ram_awvalid || ram_arvalid) begin
                     ram_busy <= 1;
                     ram_owner <= 0;
@@ -239,14 +207,12 @@ module pcie_axi_top
                     ram_owner <= 1;
                 end
             end else begin
-                // Release when transaction completes
                 if ((ram_real_bvalid && ram_real_bready) || (ram_real_rvalid && ram_real_rready))
                     ram_busy <= 0;
             end
         end
     end
 
-    // Mux to RAM
     wire bar_owns = !ram_owner;
     assign ram_real_awaddr  = bar_owns ? ram_awaddr  : dma_ram_awaddr;
     assign ram_real_wdata   = bar_owns ? ram_wdata   : dma_ram_wdata;
@@ -258,7 +224,6 @@ module pcie_axi_top
     assign ram_real_arvalid = bar_owns ? ram_arvalid : dma_ram_arvalid;
     assign ram_real_rready  = bar_owns ? ram_rready  : dma_ram_rready;
 
-    // Responses back
     assign ram_awready     = bar_owns ? ram_real_awready : 1'b0;
     assign ram_wready      = bar_owns ? ram_real_wready  : 1'b0;
     assign ram_bresp       = ram_real_bresp;

@@ -48,7 +48,9 @@ module axi_ram
     wire [ADDR_BITS-1:0] wr_idx = s_axi_awaddr[ADDR_BITS+2:3];
     wire [ADDR_BITS-1:0] rd_idx = s_axi_araddr[ADDR_BITS+2:3];
 
-    // Write channel
+    //=========================================================================
+    // Write channel - 2 stages: accept → respond
+    //=========================================================================
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             s_axi_awready <= 1;
@@ -56,8 +58,8 @@ module axi_ram
             s_axi_bvalid <= 0;
             s_axi_bresp <= AXI_OKAY;
         end else begin
+            // Stage 1: Accept write, execute immediately
             if (s_axi_awvalid && s_axi_wvalid && s_axi_awready) begin
-                // Byte-lane write - uses wr_idx in same cycle as handshake (OK)
                 for (int i = 0; i < DATA_W/8; i++) begin
                     if (s_axi_wstrb[i])
                         mem[wr_idx][i*8 +: 8] <= s_axi_wdata[i*8 +: 8];
@@ -67,6 +69,7 @@ module axi_ram
                 s_axi_bvalid <= 1;
             end
             
+            // Stage 2: Response accepted, back to idle
             if (s_axi_bvalid && s_axi_bready) begin
                 s_axi_bvalid <= 0;
                 s_axi_awready <= 1;
@@ -75,8 +78,11 @@ module axi_ram
         end
     end
 
-    // Read channel - synchronous read for BRAM
-    logic [ADDR_BITS-1:0] rd_addr_latched;  // Latched address
+    //=========================================================================
+    // Read channel - 2 stages: accept → data ready
+    // BRAM read latency handled by registering address
+    //=========================================================================
+    logic [ADDR_BITS-1:0] rd_addr_latched;
     logic read_pending;
 
     always_ff @(posedge clk or negedge rst_n) begin
@@ -88,21 +94,21 @@ module axi_ram
             read_pending <= 0;
             rd_addr_latched <= 0;
         end else begin
-            // Stage 1: Accept read request, latch address
+            // Stage 1: Accept address, start BRAM read
             if (s_axi_arvalid && s_axi_arready) begin
-                rd_addr_latched <= rd_idx;  // Save address before arready goes low
+                rd_addr_latched <= rd_idx;
                 s_axi_arready <= 0;
                 read_pending <= 1;
             end
             
-            // Stage 2: BRAM data ready, present to master
+            // Stage 2: BRAM data ready, present and wait for rready
             if (read_pending) begin
-                s_axi_rdata <= mem[rd_addr_latched];  // Use latched address
+                s_axi_rdata <= mem[rd_addr_latched];
                 s_axi_rvalid <= 1;
                 read_pending <= 0;
             end
             
-            // Stage 3: Master accepts data
+            // When master accepts, go back to idle
             if (s_axi_rvalid && s_axi_rready) begin
                 s_axi_rvalid <= 0;
                 s_axi_arready <= 1;

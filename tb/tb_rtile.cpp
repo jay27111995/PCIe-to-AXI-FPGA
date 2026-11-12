@@ -127,37 +127,44 @@ int main(int argc, char** argv) {
     dut->tx_hcrdt_init = 0; dut->tx_dcrdt_init = 0;
 
     int pass = 0, fail = 0;
-    printf("=== PCIe-to-AXI Bridge + DMA Testbench ===\n\n");
+    printf("=== PCIe-to-AXI Bridge + DMA Testbench ===\n");
+    printf("Address map: 0x0xxx=DMA, 0x1xxx=RAM\n\n");
 
-    // Test 1: Scratch register
-    printf("Test 1: Scratch register write/read\n");
-    send_mwr(0x0000, 0xCAFEBABE12345678);
+    //=========================================================================
+    // New address map:
+    //   0x0000-0x0FFF: DMA registers
+    //   0x1000-0x1FFF: RAM (4KB)
+    //=========================================================================
+
+    // Test 1: RAM write/read (basic PCIe connectivity test)
+    printf("Test 1: RAM write/read\n");
+    send_mwr(0x1000, 0xCAFEBABE12345678);
     for (int i = 0; i < 10; i++) tick();
-    send_mrd(0x0000, 0x10);
+    send_mrd(0x1000, 0x10);
     if (wait_cpld(0x10, 0xCAFEBABE12345678)) { printf("  ✓ PASS\n"); pass++; }
     else { printf("  ✗ FAIL\n"); fail++; }
 
-    // Test 2: RAM write/read
-    printf("Test 2: RAM write/read\n");
-    send_mwr(0x2000, 0x1111222233334444);
+    // Test 2: RAM multiple addresses
+    printf("Test 2: RAM multiple addresses\n");
+    send_mwr(0x1008, 0x1111222233334444);
     for (int i = 0; i < 10; i++) tick();
-    send_mrd(0x2000, 0x20);
+    send_mrd(0x1008, 0x20);
     if (wait_cpld(0x20, 0x1111222233334444)) { printf("  ✓ PASS\n"); pass++; }
     else { printf("  ✗ FAIL\n"); fail++; }
 
     // Test 3: DMA C2H (RAM → Host)
     printf("Test 3: DMA C2H (RAM → Host)\n");
-    send_mwr(0x2008, 0xAAAABBBBCCCCDDDD);  // Put data in RAM
+    send_mwr(0x1100, 0xAAAABBBBCCCCDDDD);  // Put data in RAM at 0x1100
     for (int i = 0; i < 10; i++) tick();
-    send_mwr(0x1020, 0x2008);      // local_addr
+    send_mwr(0x0020, 0x1100);      // local_addr = 0x1100
     for (int i = 0; i < 5; i++) tick();
-    send_mwr(0x1010, 0x80000000);  // host_lo
+    send_mwr(0x0010, 0x80000000);  // host_lo
     for (int i = 0; i < 5; i++) tick();
-    send_mwr(0x1018, 0);           // host_hi
+    send_mwr(0x0018, 0);           // host_hi
     for (int i = 0; i < 5; i++) tick();
-    send_mwr(0x1028, 8);           // length
+    send_mwr(0x0028, 8);           // length
     for (int i = 0; i < 5; i++) tick();
-    send_mwr(0x1000, 0x3);         // start C2H
+    send_mwr(0x0000, 0x3);         // start C2H
     for (int i = 0; i < 100; i++) tick();
     if (host_mem[0x80000000] == 0xAAAABBBBCCCCDDDD) { printf("  ✓ PASS\n"); pass++; }
     else { printf("  ✗ FAIL (got 0x%lx)\n", host_mem[0x80000000]); fail++; }
@@ -165,17 +172,17 @@ int main(int argc, char** argv) {
     // Test 4: DMA H2C (Host → RAM)  
     printf("Test 4: DMA H2C (Host → RAM)\n");
     host_mem[0x90000000] = 0xDEADBEEF12345678;
-    send_mwr(0x1020, 0x2100);      // local_addr
+    send_mwr(0x0020, 0x1200);      // local_addr = 0x1200
     for (int i = 0; i < 5; i++) tick();
-    send_mwr(0x1010, 0x90000000);  // host_lo
+    send_mwr(0x0010, 0x90000000);  // host_lo
     for (int i = 0; i < 5; i++) tick();
-    send_mwr(0x1018, 0);           // host_hi
+    send_mwr(0x0018, 0);           // host_hi
     for (int i = 0; i < 5; i++) tick();
-    send_mwr(0x1028, 8);           // length
+    send_mwr(0x0028, 8);           // length
     for (int i = 0; i < 5; i++) tick();
-    send_mwr(0x1000, 0x1);         // start H2C
+    send_mwr(0x0000, 0x1);         // start H2C
     for (int i = 0; i < 100; i++) tick();
-    send_mrd(0x2100, 0x30);
+    send_mrd(0x1200, 0x30);        // Read from RAM at 0x1200
     if (wait_cpld(0x30, 0xDEADBEEF12345678)) { printf("  ✓ PASS\n"); pass++; }
     else { printf("  ✗ FAIL\n"); fail++; }
 
