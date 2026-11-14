@@ -185,8 +185,7 @@ void Vpcie_axi_top___024root__trace_chg_0_sub_0(Vpcie_axi_top___024root* vlSelf,
         bufp->chgIData(oldp+129,(vlSelf->pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_data_cnt),20);
         bufp->chgIData(oldp+130,(vlSelf->pcie_axi_top__DOT__u_dma__DOT__ctrl_reg),32);
         bufp->chgIData(oldp+131,(vlSelf->pcie_axi_top__DOT__u_dma__DOT__status_reg),32);
-        bufp->chgIData(oldp+132,(vlSelf->pcie_axi_top__DOT__u_dma__DOT__host_addr_lo),32);
-        bufp->chgIData(oldp+133,(vlSelf->pcie_axi_top__DOT__u_dma__DOT__host_addr_hi),32);
+        bufp->chgQData(oldp+132,(vlSelf->pcie_axi_top__DOT__u_dma__DOT__host_addr),64);
         bufp->chgIData(oldp+134,(vlSelf->pcie_axi_top__DOT__u_dma__DOT__local_addr),32);
         bufp->chgIData(oldp+135,(vlSelf->pcie_axi_top__DOT__u_dma__DOT__length_reg),32);
         bufp->chgBit(oldp+136,((1U & vlSelf->pcie_axi_top__DOT__u_dma__DOT__ctrl_reg)));
@@ -195,61 +194,63 @@ void Vpcie_axi_top___024root__trace_chg_0_sub_0(Vpcie_axi_top___024root* vlSelf,
         bufp->chgBit(oldp+138,((1U & (vlSelf->pcie_axi_top__DOT__u_dma__DOT__ctrl_reg 
                                       >> 2U))));
         bufp->chgBit(oldp+139,((1U & vlSelf->pcie_axi_top__DOT__u_dma__DOT__status_reg)));
-        bufp->chgBit(oldp+140,((1U & (vlSelf->pcie_axi_top__DOT__u_dma__DOT__status_reg 
-                                      >> 1U))));
-        bufp->chgCData(oldp+141,(vlSelf->pcie_axi_top__DOT__u_dma__DOT__dma_state),4);
-        bufp->chgIData(oldp+142,(vlSelf->pcie_axi_top__DOT__u_dma__DOT__bytes_remaining),32);
-        bufp->chgQData(oldp+143,(vlSelf->pcie_axi_top__DOT__u_dma__DOT__cur_host_addr),64);
-        bufp->chgIData(oldp+145,(vlSelf->pcie_axi_top__DOT__u_dma__DOT__cur_local_addr),32);
-        bufp->chgQData(oldp+146,(vlSelf->pcie_axi_top__DOT__u_dma__DOT__dma_data_buf),64);
-        bufp->chgCData(oldp+148,(vlSelf->pcie_axi_top__DOT__u_dma__DOT__cur_tag),8);
-        bufp->chgSData(oldp+149,((0x1ffU & (((IData)(vlSelf->pcie_axi_top__DOT__ram_owner)
+        bufp->chgCData(oldp+140,(vlSelf->pcie_axi_top__DOT__u_dma__DOT__state),2);
+        bufp->chgIData(oldp+141,(vlSelf->pcie_axi_top__DOT__u_dma__DOT__bytes_left),32);
+        bufp->chgQData(oldp+142,(vlSelf->pcie_axi_top__DOT__u_dma__DOT__cur_host),64);
+        bufp->chgIData(oldp+144,(vlSelf->pcie_axi_top__DOT__u_dma__DOT__cur_local),32);
+        bufp->chgQData(oldp+145,(vlSelf->pcie_axi_top__DOT__u_dma__DOT__data_buf),64);
+        bufp->chgCData(oldp+147,(vlSelf->pcie_axi_top__DOT__u_dma__DOT__tag),8);
+        bufp->chgBit(oldp+148,(vlSelf->pcie_axi_top__DOT__u_dma__DOT__fetch_issued));
+        bufp->chgBit(oldp+149,(vlSelf->pcie_axi_top__DOT__u_dma__DOT__fetch_done));
+        bufp->chgBit(oldp+150,(vlSelf->pcie_axi_top__DOT__u_dma__DOT__store_issued));
+        bufp->chgBit(oldp+151,(vlSelf->pcie_axi_top__DOT__u_dma__DOT__store_done));
+        bufp->chgSData(oldp+152,((0x1ffU & (((IData)(vlSelf->pcie_axi_top__DOT__ram_owner)
                                               ? vlSelf->pcie_axi_top__DOT__dma_ram_awaddr
                                               : vlSelf->pcie_axi_top__DOT__brg_awaddr) 
                                             >> 3U))),9);
-        bufp->chgSData(oldp+150,((0x1ffU & (((IData)(vlSelf->pcie_axi_top__DOT__ram_owner)
+        bufp->chgSData(oldp+153,((0x1ffU & (((IData)(vlSelf->pcie_axi_top__DOT__ram_owner)
                                               ? vlSelf->pcie_axi_top__DOT__dma_ram_araddr
                                               : vlSelf->pcie_axi_top__DOT__brg_araddr) 
                                             >> 3U))),9);
-        bufp->chgSData(oldp+151,(vlSelf->pcie_axi_top__DOT__u_ram__DOT__rd_addr_latched),9);
-        bufp->chgBit(oldp+152,(vlSelf->pcie_axi_top__DOT__u_ram__DOT__read_pending));
-        bufp->chgIData(oldp+153,(vlSelf->pcie_axi_top__DOT__u_ram__DOT__unnamedblk1__DOT__i),32);
+        bufp->chgSData(oldp+154,(vlSelf->pcie_axi_top__DOT__u_ram__DOT__rd_addr_latched),9);
+        bufp->chgBit(oldp+155,(vlSelf->pcie_axi_top__DOT__u_ram__DOT__read_pending));
+        bufp->chgIData(oldp+156,(vlSelf->pcie_axi_top__DOT__u_ram__DOT__unnamedblk1__DOT__i),32);
     }
-    bufp->chgBit(oldp+154,(vlSelf->clk));
-    bufp->chgBit(oldp+155,(vlSelf->rst_n));
-    bufp->chgWData(oldp+156,(vlSelf->rx_st_hdr),128);
-    bufp->chgWData(oldp+160,(vlSelf->rx_st_data),256);
-    bufp->chgBit(oldp+168,(vlSelf->rx_st_sop));
-    bufp->chgBit(oldp+169,(vlSelf->rx_st_eop));
-    bufp->chgBit(oldp+170,(vlSelf->rx_st_hvalid));
-    bufp->chgBit(oldp+171,(vlSelf->rx_st_dvalid));
-    bufp->chgCData(oldp+172,(vlSelf->rx_st_bar),3);
-    bufp->chgBit(oldp+173,(vlSelf->rx_st_ready));
-    bufp->chgWData(oldp+174,(vlSelf->tx_st_hdr),128);
-    bufp->chgWData(oldp+178,(vlSelf->tx_st_data),256);
-    bufp->chgBit(oldp+186,(vlSelf->tx_st_sop));
-    bufp->chgBit(oldp+187,(vlSelf->tx_st_eop));
-    bufp->chgBit(oldp+188,(vlSelf->tx_st_hvalid));
-    bufp->chgBit(oldp+189,(vlSelf->tx_st_dvalid));
-    bufp->chgBit(oldp+190,(vlSelf->tx_st_ready));
-    bufp->chgCData(oldp+191,(vlSelf->rx_hcrdt_init),3);
-    bufp->chgCData(oldp+192,(vlSelf->rx_hcrdt_update),3);
-    bufp->chgCData(oldp+193,(vlSelf->rx_hcrdt_update_cnt),6);
-    bufp->chgCData(oldp+194,(vlSelf->rx_dcrdt_init),3);
-    bufp->chgCData(oldp+195,(vlSelf->rx_dcrdt_update),3);
-    bufp->chgSData(oldp+196,(vlSelf->rx_dcrdt_update_cnt),12);
-    bufp->chgCData(oldp+197,(vlSelf->tx_hcrdt_init),3);
-    bufp->chgCData(oldp+198,(vlSelf->tx_hcrdt_init_ack),3);
-    bufp->chgCData(oldp+199,(vlSelf->tx_hcrdt_update),3);
-    bufp->chgCData(oldp+200,(vlSelf->tx_hcrdt_update_cnt),6);
-    bufp->chgCData(oldp+201,(vlSelf->tx_dcrdt_init),3);
-    bufp->chgCData(oldp+202,(vlSelf->tx_dcrdt_init_ack),3);
-    bufp->chgCData(oldp+203,(vlSelf->tx_dcrdt_update),3);
-    bufp->chgSData(oldp+204,(vlSelf->tx_dcrdt_update_cnt),12);
-    bufp->chgBit(oldp+205,(vlSelf->link_up));
-    bufp->chgCData(oldp+206,(vlSelf->ltssm_state),6);
-    bufp->chgBit(oldp+207,(vlSelf->dma_irq));
-    bufp->chgCData(oldp+208,((0xffU & (vlSelf->rx_st_hdr[1U] 
+    bufp->chgBit(oldp+157,(vlSelf->clk));
+    bufp->chgBit(oldp+158,(vlSelf->rst_n));
+    bufp->chgWData(oldp+159,(vlSelf->rx_st_hdr),128);
+    bufp->chgWData(oldp+163,(vlSelf->rx_st_data),256);
+    bufp->chgBit(oldp+171,(vlSelf->rx_st_sop));
+    bufp->chgBit(oldp+172,(vlSelf->rx_st_eop));
+    bufp->chgBit(oldp+173,(vlSelf->rx_st_hvalid));
+    bufp->chgBit(oldp+174,(vlSelf->rx_st_dvalid));
+    bufp->chgCData(oldp+175,(vlSelf->rx_st_bar),3);
+    bufp->chgBit(oldp+176,(vlSelf->rx_st_ready));
+    bufp->chgWData(oldp+177,(vlSelf->tx_st_hdr),128);
+    bufp->chgWData(oldp+181,(vlSelf->tx_st_data),256);
+    bufp->chgBit(oldp+189,(vlSelf->tx_st_sop));
+    bufp->chgBit(oldp+190,(vlSelf->tx_st_eop));
+    bufp->chgBit(oldp+191,(vlSelf->tx_st_hvalid));
+    bufp->chgBit(oldp+192,(vlSelf->tx_st_dvalid));
+    bufp->chgBit(oldp+193,(vlSelf->tx_st_ready));
+    bufp->chgCData(oldp+194,(vlSelf->rx_hcrdt_init),3);
+    bufp->chgCData(oldp+195,(vlSelf->rx_hcrdt_update),3);
+    bufp->chgCData(oldp+196,(vlSelf->rx_hcrdt_update_cnt),6);
+    bufp->chgCData(oldp+197,(vlSelf->rx_dcrdt_init),3);
+    bufp->chgCData(oldp+198,(vlSelf->rx_dcrdt_update),3);
+    bufp->chgSData(oldp+199,(vlSelf->rx_dcrdt_update_cnt),12);
+    bufp->chgCData(oldp+200,(vlSelf->tx_hcrdt_init),3);
+    bufp->chgCData(oldp+201,(vlSelf->tx_hcrdt_init_ack),3);
+    bufp->chgCData(oldp+202,(vlSelf->tx_hcrdt_update),3);
+    bufp->chgCData(oldp+203,(vlSelf->tx_hcrdt_update_cnt),6);
+    bufp->chgCData(oldp+204,(vlSelf->tx_dcrdt_init),3);
+    bufp->chgCData(oldp+205,(vlSelf->tx_dcrdt_init_ack),3);
+    bufp->chgCData(oldp+206,(vlSelf->tx_dcrdt_update),3);
+    bufp->chgSData(oldp+207,(vlSelf->tx_dcrdt_update_cnt),12);
+    bufp->chgBit(oldp+208,(vlSelf->link_up));
+    bufp->chgCData(oldp+209,(vlSelf->ltssm_state),6);
+    bufp->chgBit(oldp+210,(vlSelf->dma_irq));
+    bufp->chgCData(oldp+211,((0xffU & (vlSelf->rx_st_hdr[1U] 
                                        >> 8U))),8);
 }
 

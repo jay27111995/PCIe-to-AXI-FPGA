@@ -1,0 +1,5 @@
+22 serialization::archive 20 0 1 0 0 5 0 0 0 22 alt_sld_fab_0.sopcinfo 0 0 10 text_model 0 0 0 1 1 
+ 20 pcie_bridge.sopcinfo 10 text_model 0 1 1 
+ 36 pcie_bridge_axi_bridge_hw_0.sopcinfo 10 text_model 0 1 1 
+ 24 pcie_bridge_dut.sopcinfo 10 text_model 0 1 1 
+ 28 pcie_bridge_resetIP.sopcinfo 10 text_model 0 1 1 

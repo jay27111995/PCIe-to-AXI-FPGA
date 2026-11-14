@@ -106,8 +106,12 @@ class alignas(VL_CACHE_LINE_BYTES) Vpcie_axi_top___024root final : public Verila
         CData/*1:0*/ pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__state;
         CData/*3:0*/ pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__cnt;
         CData/*0:0*/ pcie_axi_top__DOT__u_dma__DOT__start;
-        CData/*3:0*/ pcie_axi_top__DOT__u_dma__DOT__dma_state;
-        CData/*7:0*/ pcie_axi_top__DOT__u_dma__DOT__cur_tag;
+        CData/*1:0*/ pcie_axi_top__DOT__u_dma__DOT__state;
+        CData/*7:0*/ pcie_axi_top__DOT__u_dma__DOT__tag;
+        CData/*0:0*/ pcie_axi_top__DOT__u_dma__DOT__fetch_issued;
+        CData/*0:0*/ pcie_axi_top__DOT__u_dma__DOT__fetch_done;
+        CData/*0:0*/ pcie_axi_top__DOT__u_dma__DOT__store_issued;
+        CData/*0:0*/ pcie_axi_top__DOT__u_dma__DOT__store_done;
         CData/*0:0*/ pcie_axi_top__DOT__u_ram__DOT__read_pending;
         CData/*0:0*/ __Vfunc_is_4dw__7__Vfuncout;
         CData/*2:0*/ __Vfunc_is_4dw__7__fmt;
@@ -142,15 +146,13 @@ class alignas(VL_CACHE_LINE_BYTES) Vpcie_axi_top___024root final : public Verila
         VlWide<4>/*127:0*/ pcie_axi_top__DOT__u_bridge__DOT__tx_hdr_r;
         IData/*19:0*/ pcie_axi_top__DOT__u_bridge__DOT__u_crdt__DOT__tx_cpl_data_cnt;
         IData/*31:0*/ pcie_axi_top__DOT__u_dma__DOT__ctrl_reg;
-        IData/*31:0*/ pcie_axi_top__DOT__u_dma__DOT__status_reg;
-        IData/*31:0*/ pcie_axi_top__DOT__u_dma__DOT__host_addr_lo;
-        IData/*31:0*/ pcie_axi_top__DOT__u_dma__DOT__host_addr_hi;
-        IData/*31:0*/ pcie_axi_top__DOT__u_dma__DOT__local_addr;
     };
     struct {
+        IData/*31:0*/ pcie_axi_top__DOT__u_dma__DOT__status_reg;
+        IData/*31:0*/ pcie_axi_top__DOT__u_dma__DOT__local_addr;
         IData/*31:0*/ pcie_axi_top__DOT__u_dma__DOT__length_reg;
-        IData/*31:0*/ pcie_axi_top__DOT__u_dma__DOT__bytes_remaining;
-        IData/*31:0*/ pcie_axi_top__DOT__u_dma__DOT__cur_local_addr;
+        IData/*31:0*/ pcie_axi_top__DOT__u_dma__DOT__bytes_left;
+        IData/*31:0*/ pcie_axi_top__DOT__u_dma__DOT__cur_local;
         IData/*31:0*/ pcie_axi_top__DOT__u_ram__DOT__unnamedblk1__DOT__i;
         VlWide<4>/*127:0*/ __Vfunc_hdr_addr64__8__h;
         IData/*31:0*/ __Vfunc_hdr_addr32__9__Vfuncout;
@@ -168,8 +170,9 @@ class alignas(VL_CACHE_LINE_BYTES) Vpcie_axi_top___024root final : public Verila
         QData/*63:0*/ pcie_axi_top__DOT__u_bridge__DOT__rx_addr;
         QData/*63:0*/ pcie_axi_top__DOT__u_bridge__DOT__bar_cpl_data;
         QData/*63:0*/ pcie_axi_top__DOT__u_bridge__DOT__tx_data_r;
-        QData/*63:0*/ pcie_axi_top__DOT__u_dma__DOT__cur_host_addr;
-        QData/*63:0*/ pcie_axi_top__DOT__u_dma__DOT__dma_data_buf;
+        QData/*63:0*/ pcie_axi_top__DOT__u_dma__DOT__host_addr;
+        QData/*63:0*/ pcie_axi_top__DOT__u_dma__DOT__cur_host;
+        QData/*63:0*/ pcie_axi_top__DOT__u_dma__DOT__data_buf;
         QData/*63:0*/ __Vfunc_hdr_addr64__8__Vfuncout;
         VlUnpacked<QData/*63:0*/, 512> pcie_axi_top__DOT__u_ram__DOT__mem;
         VlUnpacked<CData/*0:0*/, 3> __Vm_traceActivity;

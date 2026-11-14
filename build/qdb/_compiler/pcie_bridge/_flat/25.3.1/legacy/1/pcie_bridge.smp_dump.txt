@@ -1,0 +1,89 @@
+
+State Machine - Summary
+
+State Machine - dut|dut|rnr_avmm_reconfig_inst|cfg_curr
+Name cfg_curr.CFG_WRITE cfg_curr.CFG_READ cfg_curr.CFG_WRITE_FAST cfg_curr.HIP_DUMMY_READ cfg_curr.HIP_DUMMY_WRITE cfg_curr.HIP_WRITE cfg_curr.HIP_READ cfg_curr.CFG_IDLE 
+cfg_curr.CFG_IDLE 0 0 0 0 0 0 0 0 
+cfg_curr.HIP_READ 0 0 0 0 0 0 1 1 
+cfg_curr.HIP_WRITE 0 0 0 0 0 1 0 1 
+cfg_curr.HIP_DUMMY_WRITE 0 0 0 0 1 0 0 1 
+cfg_curr.HIP_DUMMY_READ 0 0 0 1 0 0 0 1 
+cfg_curr.CFG_WRITE_FAST 0 0 1 0 0 0 0 1 
+cfg_curr.CFG_READ 0 1 0 0 0 0 0 1 
+cfg_curr.CFG_WRITE 1 0 0 0 0 0 0 1 
+
+State Machine - dut|dut|rnr_pcie_reset_ctrl_inst|cur_state
+Name cur_state.RELEASE_WARM_RDY cur_state.PLD_RDY cur_state.BTI_WINDOW cur_state.REQ_LOCK cur_state.RESET_AIB cur_state.RELEASE_AIB_RST cur_state.INIT_RESET_ENTRY 
+cur_state.INIT_RESET_ENTRY 0 0 0 0 0 0 0 
+cur_state.RELEASE_AIB_RST 0 0 0 0 0 1 1 
+cur_state.RESET_AIB 0 0 0 0 1 0 1 
+cur_state.REQ_LOCK 0 0 0 1 0 0 1 
+cur_state.BTI_WINDOW 0 0 1 0 0 0 1 
+cur_state.PLD_RDY 0 1 0 0 0 0 1 
+cur_state.RELEASE_WARM_RDY 1 0 0 0 0 0 1 
+
+State Machine - dut|dut|rnr_pcie_reset_ctrl_inst|cur_state_1
+Name cur_state_1.RELEASE_WARM_RDY cur_state_1.PLD_RDY cur_state_1.BTI_WINDOW cur_state_1.REQ_LOCK cur_state_1.RESET_AIB cur_state_1.RELEASE_AIB_RST cur_state_1.INIT_RESET_ENTRY 
+cur_state_1.INIT_RESET_ENTRY 0 0 0 0 0 0 0 
+cur_state_1.RELEASE_AIB_RST 0 0 0 0 0 1 1 
+cur_state_1.RESET_AIB 0 0 0 0 1 0 1 
+cur_state_1.REQ_LOCK 0 0 0 1 0 0 1 
+cur_state_1.BTI_WINDOW 0 0 1 0 0 0 1 
+cur_state_1.PLD_RDY 0 1 0 0 0 0 1 
+cur_state_1.RELEASE_WARM_RDY 1 0 0 0 0 0 1 
+
+State Machine - dut|dut|u_rnr_pcie_soft_rx_tx_wrapper|p0_csb2wire_inst|csb_ep_inst|csbendpoint|sbebase|sbcport|gen_legacy_ism.sbcgcgu|curr_state
+Name curr_state.CI_SM_IDLE curr_state.CI_SM_DONE curr_state.CI_SM_HOLD 
+curr_state.CI_SM_IDLE 0 0 0 
+curr_state.CI_SM_DONE 1 1 0 
+curr_state.CI_SM_HOLD 1 0 1 
+
+State Machine - axi_bridge_hw_0|axi_bridge_hw_0|u_core|u_bridge|u_crdt|state
+Name state.DONE state.UPDATE state.INIT state.IDLE 
+state.IDLE 0 0 0 0 
+state.INIT 0 0 1 1 
+state.UPDATE 0 1 0 1 
+state.DONE 1 0 0 1 
+
+State Machine - dut|dut|u_rnr_pcie_soft_rx_tx_wrapper|u_rnr_pcie_ehp_wrapper_0|u_rnr_pcie_ehp_pack_wrapper|transaction_cycle_count
+Name transaction_cycle_count.100 transaction_cycle_count.000 transaction_cycle_count.101 
+transaction_cycle_count.000 0 0 0 
+transaction_cycle_count.100 1 1 0 
+transaction_cycle_count.101 0 1 1 
+
+State Machine - axi_bridge_hw_0|axi_bridge_hw_0|u_core|u_dma|state
+Name state.DONE state.STORE state.FETCH state.IDLE 
+state.IDLE 0 0 0 0 
+state.FETCH 0 0 1 1 
+state.STORE 0 1 0 1 
+state.DONE 1 0 0 1 
+
+State Machine - dut|dut|u_rnr_pcie_soft_rx_tx_wrapper|p0_csb2wire_inst|csb_ep_inst|csbendpoint|sbebase|i_sbcasyncclkreq_side_clk|fsm
+Name fsm.WAIT_ACK_ST fsm.HYST_ST fsm.ACTIVE_ST fsm.RESET_ST fsm.GATED_ST 
+fsm.RESET_ST 0 0 0 0 0 
+fsm.ACTIVE_ST 0 0 1 1 0 
+fsm.HYST_ST 0 1 0 1 0 
+fsm.WAIT_ACK_ST 1 0 0 1 0 
+fsm.GATED_ST 0 0 0 1 1 
+
+State Machine - axi_bridge_hw_0|axi_bridge_hw_0|u_core|u_bridge|state
+Name state.ST_BAR_CPL state.ST_BAR_RD_DATA state.ST_BAR_WR_RESP state.ST_DMA_MWR state.ST_DMA_MRD state.ST_BAR_RD_ADDR state.ST_BAR_WR_ADDR state.ST_IDLE 
+state.ST_IDLE 0 0 0 0 0 0 0 0 
+state.ST_BAR_WR_ADDR 0 0 0 0 0 0 1 1 
+state.ST_BAR_RD_ADDR 0 0 0 0 0 1 0 1 
+state.ST_DMA_MRD 0 0 0 0 1 0 0 1 
+state.ST_DMA_MWR 0 0 0 1 0 0 0 1 
+state.ST_BAR_WR_RESP 0 0 1 0 0 0 0 1 
+state.ST_BAR_RD_DATA 0 1 0 0 0 0 0 1 
+state.ST_BAR_CPL 1 0 0 0 0 0 0 1 
+
+State Machine - dut|dut|u_rnr_pcie_soft_rx_tx_wrapper|u_rnr_pcie_soft_rx_wrapper|p0_rx_aib_deskew|dsk_sm|state
+Name state.ST_DESKEW_DONE state.ST_DESKEW_ERROR state.ST_RETRY state.ST_WAIT_FOR_DONE state.ST_CLEAR_FOR_RETRY state.ST_FINISH_DESKEW state.ST_BOND state.ST_IDLE 
+state.ST_IDLE 0 0 0 0 0 0 0 0 
+state.ST_BOND 0 0 0 0 0 0 1 1 
+state.ST_FINISH_DESKEW 0 0 0 0 0 1 0 1 
+state.ST_CLEAR_FOR_RETRY 0 0 0 0 1 0 0 1 
+state.ST_WAIT_FOR_DONE 0 0 0 1 0 0 0 1 
+state.ST_RETRY 0 0 1 0 0 0 0 1 
+state.ST_DESKEW_ERROR 0 1 0 0 0 0 0 1 
+state.ST_DESKEW_DONE 1 0 0 0 0 0 0 1 

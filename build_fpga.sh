@@ -42,6 +42,7 @@ cp "${SCRIPT_DIR}"/fpga/pcie_bridge.tcl "${BUILD_DIR}/"
 cp "${SCRIPT_DIR}"/fpga/pcie_bridge.qsf "${BUILD_DIR}/"
 cp "${SCRIPT_DIR}"/fpga/pcie_bridge.sdc "${BUILD_DIR}/"
 cp "${SCRIPT_DIR}"/fpga/bridge_hw.tcl "${BUILD_DIR}/"
+cp "${SCRIPT_DIR}"/fpga/axi_bridge_hw.sv "${BUILD_DIR}/"
 
 cd "${BUILD_DIR}"
 

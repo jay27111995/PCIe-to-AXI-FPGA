@@ -1,0 +1,19 @@
+22 serialization::archive 20 0 0 0 0 5 0 1 / 4 home 7 eelljay 16 PCIe-to-AXI-FPGA 5 build 0 0 1 0 0 0 15 0 1 / 4 home 7 eelljay 16 PCIe-to-AXI-FPGA 5 build 3 qdb 9 _compiler 11 pcie_bridge 5 _flat 6 25.3.1 6 source 1 1 5 .temp 9 cpt_proxy 35 altera_internal_oscillator_atom.sdc 987 # (C) 2001-2025 Altera Corporation. All rights reserved.
+# Your use of Altera Corporation's design tools, logic functions and other 
+# software and tools, and its AMPP partner logic functions, and any output 
+# files from any of the foregoing (including device programming or simulation 
+# files), and any associated documentation or information are expressly subject 
+# to the terms and conditions of the Altera Program License Subscription 
+# Agreement, Altera IP License Agreement, or other applicable 
+# license agreement, including, without limitation, that your use is for the 
+# sole purpose of programming logic devices manufactured by Altera and sold by 
+# Altera or its authorized distributors.  Please refer to the applicable 
+# agreement for further details.
+
+
+# The clock output is 250MHz
+
+if {[get_collection_size [get_clocks altera_int_osc_clk -nowarn]] == 0} {
+	create_clock -name altera_int_osc_clk -period 4.000 [get_nodes {*|intosc|oscillator_dut~oscillator_clock}]
+}
+ 0
