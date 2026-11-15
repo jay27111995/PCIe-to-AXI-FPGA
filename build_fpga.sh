@@ -57,8 +57,8 @@ if [ ! -f pcie_bridge.qsys ]; then
 fi
 
 echo "[Step 3/4] Generating Verilog from Qsys..."
-# Force regeneration by removing cached IP directory
-rm -rf pcie_bridge
+# Force regeneration by removing all cached directories
+rm -rf pcie_bridge ip
 qsys-generate pcie_bridge.qsys --synthesis=VERILOG --clear-output-directory
 
 if [ ! -d "ip/pcie_bridge" ]; then

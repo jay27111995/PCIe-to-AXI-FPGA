@@ -265,10 +265,7 @@ module axi_bridge_hw (
 
         // Status
         .link_up              (1'b1),
-        .ltssm_state          (6'h11),  // L0
-
-        // IRQ (unused)
-        .dma_irq              ()
+        .ltssm_state          (6'h11)   // L0
     );
 
 endmodule
