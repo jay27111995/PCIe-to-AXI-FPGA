@@ -4,9 +4,6 @@ set_global_assignment -name PROJECT_CREATION_TIME_DATE "07:01:06  JANUARY 13, 20
 set_global_assignment -name LAST_QUARTUS_VERSION "25.3.1 SP1.02,1.01 Pro Edition"
 set_global_assignment -name FAMILY "Agilex 7"
 set_global_assignment -name DEVICE AGIB027R29A1E1VB
-set_global_assignment -name IP_FILE ip/pcie_bridge/pcie_bridge_dut.ip
-set_global_assignment -name IP_FILE ip/pcie_bridge/pcie_bridge_resetIP.ip
-set_global_assignment -name IP_FILE ip/pcie_bridge/pcie_bridge_axi_bridge_hw_0.ip
 set_global_assignment -name QSYS_FILE pcie_bridge.qsys
 set_global_assignment -name PWRMGT_VOLTAGE_OUTPUT_FORMAT "LINEAR FORMAT"
 set_global_assignment -name PWRMGT_LINEAR_FORMAT_N "-12"
