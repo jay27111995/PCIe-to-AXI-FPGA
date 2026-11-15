@@ -38,7 +38,6 @@ rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}"
 cp "${SCRIPT_DIR}"/rtl/*.sv "${BUILD_DIR}/"
 cp "${SCRIPT_DIR}"/fpga/pcie_bridge.tcl "${BUILD_DIR}/"
-cp "${SCRIPT_DIR}"/fpga/pcie_bridge.qsf "${BUILD_DIR}/"
 cp "${SCRIPT_DIR}"/fpga/pcie_bridge.sdc "${BUILD_DIR}/"
 cp "${SCRIPT_DIR}"/fpga/bridge_hw.tcl "${BUILD_DIR}/"
 cp "${SCRIPT_DIR}"/fpga/axi_bridge_hw.sv "${BUILD_DIR}/"
@@ -57,23 +56,17 @@ if [ ! -f pcie_bridge.qsys ]; then
 fi
 
 echo "[Step 3/4] Generating Verilog from Qsys..."
-# Force full regeneration - remove all cached directories
-rm -rf pcie_bridge ip dni qdb tmp-clearbox support_logic
+qsys-generate pcie_bridge.qsys --synthesis=VERILOG
 
-# Generate all IP components with full hierarchy
-qsys-generate pcie_bridge.qsys --synthesis=VERILOG --clear-output-directory --parallel
-
-if [ ! -d "pcie_bridge" ]; then
+if [ ! -d "ip/pcie_bridge" ]; then
   echo "Error: qsys-generate failed"
   exit 1
 fi
 
-# Add the QIP to qsf so Quartus finds the generated files
-cp "${SCRIPT_DIR}/fpga/pcie_bridge.qsf" pcie_bridge.qsf
-echo 'set_global_assignment -name QIP_FILE pcie_bridge/pcie_bridge.qip' >> pcie_bridge.qsf
-
 # Step 4: Quartus compile
 echo "[Step 4/4] Running Quartus compilation..."
+rm -f pcie_bridge.qsf
+cp "${SCRIPT_DIR}/fpga/pcie_bridge.qsf" pcie_bridge.qsf
 
 if ! quartus_sh --flow compile pcie_bridge; then
   echo "Error: Quartus compilation failed"
