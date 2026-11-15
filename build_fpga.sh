@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # PCIe-to-AXI Bridge FPGA Build Script for Intel Agilex 7 R-Tile
-# This uses the intel_pcie_axi_mcdma IP for PCIe, then our custom bridge.
 
 set -o pipefail
 
