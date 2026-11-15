@@ -46,7 +46,7 @@ set_fileset_property QUARTUS_SYNTH ENABLE_FILE_OVERWRITE_MODE true
 add_fileset_file axi_bridge_hw.sv SYSTEM_VERILOG PATH axi_bridge_hw.sv TOP_LEVEL_FILE
 add_fileset_file rtile_pkg.sv SYSTEM_VERILOG PATH rtile_pkg.sv
 add_fileset_file rtile_crdt.sv SYSTEM_VERILOG PATH rtile_crdt.sv
-add_fileset_file rtile_top.sv SYSTEM_VERILOG PATH rtile_top.sv
+add_fileset_file pcie_axi_bridge.sv SYSTEM_VERILOG PATH pcie_axi_bridge.sv
 add_fileset_file axi_ram.sv SYSTEM_VERILOG PATH axi_ram.sv
 add_fileset_file dma_engine.sv SYSTEM_VERILOG PATH dma_engine.sv
 add_fileset_file top.sv SYSTEM_VERILOG PATH top.sv
