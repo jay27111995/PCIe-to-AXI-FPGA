@@ -61,7 +61,7 @@ echo "[Step 3/4] Generating Verilog from Qsys..."
 rm -rf pcie_bridge ip
 qsys-generate pcie_bridge.qsys --synthesis=VERILOG --clear-output-directory
 
-if [ ! -d "ip/pcie_bridge" ]; then
+if [ ! -d "pcie_bridge" ]; then
   echo "Error: qsys-generate failed"
   exit 1
 fi
