@@ -1,5 +1,5 @@
 //-----------------------------------------------------------------------------
-// axi_bridge_hw.sv - Qsys wrapper for pcie_axi_top
+// axi_bridge_hw.sv - Qsys wrapper for top
 //
 // Adapts R-Tile 4-segment Avalon-ST interface to our single-segment design.
 // We only process one TLP at a time (segment 0 priority).
@@ -222,7 +222,7 @@ module axi_bridge_hw (
     //=========================================================================
     // Core: PCIe-to-AXI bridge with RAM and DMA
     //=========================================================================
-    pcie_axi_top u_core (
+    top u_core (
         .clk                  (Clk_i),
         .rst_n                (Rstn_i),
 

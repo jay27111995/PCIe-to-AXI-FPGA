@@ -1,11 +1,11 @@
 #include <verilated.h>
 #include <verilated_vcd_c.h>
-#include "Vpcie_axi_top.h"
+#include "Vtop.h"
 #include <cstdio>
 #include <map>
 #include <vector>
 
-Vpcie_axi_top* dut;
+Vtop* dut;
 VerilatedVcdC* trace;
 int cycle = 0;
 std::map<uint64_t, uint64_t> host_mem;
@@ -95,7 +95,7 @@ bool wait_cpld(uint8_t exp_tag, uint64_t exp_data, int timeout = 30) {
 
 int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
-    dut = new Vpcie_axi_top;
+    dut = new Vtop;
     trace = new VerilatedVcdC;
     Verilated::traceEverOn(true);
     dut->trace(trace, 99);
@@ -182,6 +182,28 @@ int main(int argc, char** argv) {
     send_mrd(0x1200, 0x30);        // Read from RAM at 0x1200
     if (wait_cpld(0x30, 0xDEADBEEF12345678)) { printf("  ✓ PASS\n"); pass++; }
     else { printf("  ✗ FAIL\n"); fail++; }
+
+    // Test 5: MSI-X interrupt
+    // When DMA completes with irq_en=1, should see MWr to MSI-X address (0xFEE00000)
+    printf("Test 5: DMA with MSI-X interrupt\n");
+    host_mem.erase(0xFEE00000);  // Clear any previous MSI-X
+    host_mem[0xA0000000] = 0x1234567890ABCDEF;
+    send_mwr(0x0010, 0xA0000000);  // host_addr
+    for (int i = 0; i < 5; i++) tick();
+    send_mwr(0x0018, 0x1300);      // local_addr
+    for (int i = 0; i < 5; i++) tick();
+    send_mwr(0x0020, 8);           // length
+    for (int i = 0; i < 5; i++) tick();
+    send_mwr(0x0000, 0x5);         // start H2C + irq_en (bit 0 + bit 2)
+    for (int i = 0; i < 150; i++) tick();
+    // Check if MSI-X was received (MWr to 0xFEE00000)
+    if (host_mem.count(0xFEE00000)) { 
+        printf("  ✓ PASS (MSI-X data=0x%lx)\n", host_mem[0xFEE00000]); 
+        pass++; 
+    } else { 
+        printf("  ✗ FAIL (no MSI-X received)\n"); 
+        fail++; 
+    }
 
     printf("\n=== Results: %d passed, %d failed ===\n", pass, fail);
     

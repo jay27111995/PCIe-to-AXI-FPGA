@@ -1,0 +1,18 @@
+# Build artifacts
+*.sof
+*.o
+*.a
+*.d
+
+# Verilator output
+tb/obj_dir/
+
+# Waveforms
+*.vcd
+
+# Quartus
+build/db/
+build/incremental_db/
+build/output_files/
+*.qws
+*.bak

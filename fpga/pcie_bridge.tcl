@@ -169,7 +169,7 @@ proc do_create_pcie_bridge {} {
 	set_component_parameter_value core16_pf0_pci_msix_table_size_hwtcl {0}
 	set_component_parameter_value core16_pf0_pci_msix_table_size_vfcomm_cs2_hwtcl {0}
 	set_component_parameter_value core16_pf0_pci_type0_device_id_hwtcl {0xcafe}
-	set_component_parameter_value core16_pf0_pci_type0_vendor_id_user_hwtcl {0x1519}
+	set_component_parameter_value core16_pf0_pci_type0_vendor_id_user_hwtcl {0x1234}
 	set_component_parameter_value core16_pf0_pcie_cap_phy_slot_num_hwtcl {0}
 	set_component_parameter_value core16_pf0_pcie_cap_slot_power_limit_scale_hwtcl {0}
 	set_component_parameter_value core16_pf0_pcie_cap_slot_power_limit_value_hwtcl {0}
