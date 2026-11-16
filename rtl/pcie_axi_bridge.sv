@@ -2,13 +2,16 @@
 // pcie_axi_bridge.sv - Bidirectional PCIe to AXI Bridge
 //
 // Handles both directions:
-//   1. PCIe → AXI Slave: Host BAR access to FPGA registers/memory
-//   2. AXI Master → PCIe: DMA engine access to host memory
+//   1. PCIe -> AXI Slave: Host BAR access to FPGA registers/memory
+//   2. AXI Master -> PCIe: FPGA-initiated access to host memory
 //
-// Also handles:
-//   - TX arbitration between BAR completions, DMA MRd, DMA MWr, MSI-X
-//   - Credit management
-//   - CplD routing back to DMA
+// Features:
+//   - TX arbitration between BAR completions, host MRd, host MWr, MSI-X
+//   - Credit management via rtile_crdt
+//   - CplD routing back to AXI master initiator
+//
+// The AXI master port can be used by any module needing host memory access
+// (DMA engines, scatter-gather controllers, etc.)
 //-----------------------------------------------------------------------------
 module pcie_axi_bridge
     import rtile_pkg::*;
@@ -16,14 +19,14 @@ module pcie_axi_bridge
     parameter int AXI_ADDR_W = 32,
     parameter int AXI_DATA_W = 64,
     // Completer ID (BDF) - set to match actual PCIe slot assignment
-    // Default 0xb400 = bus 0xb4, device 0, function 0 (dut19)
+    // Default 0xb400 = bus 0xb4, device 0, function 0
     parameter logic [15:0] COMPLETER_ID = 16'hb400
 )(
     input  logic clk,
     input  logic rst_n,
 
     //=========================================================================
-    // PCIe R-Tile Interface
+    // PCIe R-Tile Interface (directly connects to R-Tile IP)
     //=========================================================================
     input  logic [127:0] rx_st_hdr,
     input  logic [255:0] rx_st_data,
@@ -42,7 +45,7 @@ module pcie_axi_bridge
     output logic         tx_st_dvalid,
     input  logic         tx_st_ready,
 
-    // Credits
+    // Credits (directly connects to R-Tile IP)
     output logic [2:0]   rx_hcrdt_init,
     output logic [2:0]   rx_hcrdt_update,
     output logic [5:0]   rx_hcrdt_update_cnt,
@@ -62,7 +65,8 @@ module pcie_axi_bridge
     input  logic [5:0]   ltssm_state,
 
     //=========================================================================
-    // AXI Slave - BAR access (host reads/writes FPGA)
+    // AXI Slave Interface - BAR access (host reads/writes FPGA)
+    // Connect to: register files, SRAM, FIFOs, etc.
     //=========================================================================
     output logic [AXI_ADDR_W-1:0]   s_axi_awaddr,
     output logic                    s_axi_awvalid,
@@ -83,7 +87,8 @@ module pcie_axi_bridge
     output logic                    s_axi_rready,
 
     //=========================================================================
-    // AXI Master - DMA to host memory
+    // AXI Master Interface - Host memory access (FPGA reads/writes host)
+    // Connect to: DMA engines, scatter-gather controllers, etc.
     //=========================================================================
     input  logic [63:0]             m_axi_awaddr,
     input  logic                    m_axi_awvalid,
@@ -104,7 +109,7 @@ module pcie_axi_bridge
     input  logic                    m_axi_rready,
 
     //=========================================================================
-    // MSI-X Interface
+    // MSI-X Interface (directly connects to interrupt controller)
     //=========================================================================
     input  logic        msix_valid,
     output logic        msix_ready,
@@ -116,9 +121,6 @@ module pcie_axi_bridge
     //=========================================================================
     output logic [3:0]  dbg_tx_state
 );
-
-    // rx_st_ready is only asserted when we're ready to accept new TLPs
-    // This is managed by the state machine
 
     //=========================================================================
     // Credit Manager
@@ -158,45 +160,46 @@ module pcie_axi_bridge
     wire [7:0] wstrb_from_be = {rx_lbe, rx_fbe};
 
     //=========================================================================
-    // DMA MRd: Host memory read (AXI AR → PCIe MRd → CplD → AXI R)
+    // Host Memory Read (AXI Master AR -> PCIe MRd -> CplD -> AXI Master R)
+    // Translates AXI read requests into PCIe MRd TLPs
     //=========================================================================
-    logic [63:0] dma_mrd_addr_r;
-    logic [7:0]  dma_mrd_tag;
-    logic        dma_mrd_valid;  // Request pending
-    logic        dma_mrd_sent;   // MRd TLP sent, waiting for CplD
+    logic [63:0] host_mrd_addr;
+    logic [7:0]  host_mrd_tag;
+    logic        host_mrd_pending;   // Request waiting to be sent
+    logic        host_mrd_inflight;  // MRd TLP sent, waiting for CplD
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             m_axi_arready <= 1;
             m_axi_rvalid <= 0;
             m_axi_rresp <= AXI_OKAY;
-            dma_mrd_valid <= 0;
-            dma_mrd_sent <= 0;
-            dma_mrd_tag <= 0;
+            host_mrd_pending <= 0;
+            host_mrd_inflight <= 0;
+            host_mrd_tag <= 0;
         end else begin
-            // Accept new read request
-            if (m_axi_arvalid && m_axi_arready && !dma_mrd_valid) begin
-                dma_mrd_addr_r <= m_axi_araddr;
-                dma_mrd_valid <= 1;
-                dma_mrd_tag <= dma_mrd_tag + 1;
+            // Accept new read request from AXI master
+            if (m_axi_arvalid && m_axi_arready && !host_mrd_pending) begin
+                host_mrd_addr <= m_axi_araddr;
+                host_mrd_pending <= 1;
+                host_mrd_tag <= host_mrd_tag + 1;
                 m_axi_arready <= 0;
             end
 
-            // TX sent the MRd
-            if (dma_mrd_valid && dma_mrd_ready_pulse) begin
-                dma_mrd_valid <= 0;
-                dma_mrd_sent <= 1;
+            // TX sent the MRd TLP
+            if (host_mrd_pending && host_mrd_ready_pulse) begin
+                host_mrd_pending <= 0;
+                host_mrd_inflight <= 1;
             end
 
-            // Receive CplD
-            if (dma_mrd_sent && rx_is_cpld && cpl_rx_tag == dma_mrd_tag) begin
+            // Receive CplD from host
+            if (host_mrd_inflight && rx_is_cpld && cpl_rx_tag == host_mrd_tag) begin
                 m_axi_rdata <= rx_st_data[63:0];
                 m_axi_rvalid <= 1;
-                dma_mrd_sent <= 0;
+                host_mrd_inflight <= 0;
                 m_axi_arready <= 1;
             end
 
-            // R handshake
+            // AXI R handshake complete
             if (m_axi_rvalid && m_axi_rready) begin
                 m_axi_rvalid <= 0;
             end
@@ -204,11 +207,12 @@ module pcie_axi_bridge
     end
 
     //=========================================================================
-    // DMA MWr: Host memory write (AXI AW+W → PCIe MWr → AXI B)
+    // Host Memory Write (AXI Master AW+W -> PCIe MWr -> AXI Master B)
+    // Translates AXI write requests into PCIe MWr TLPs
     //=========================================================================
-    logic [63:0] dma_mwr_addr_r;
-    logic [63:0] dma_mwr_data_r;
-    logic        dma_mwr_valid;  // Request pending
+    logic [63:0] host_mwr_addr;
+    logic [63:0] host_mwr_data;
+    logic        host_mwr_pending;  // Request waiting to be sent
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -216,24 +220,24 @@ module pcie_axi_bridge
             m_axi_wready <= 1;
             m_axi_bvalid <= 0;
             m_axi_bresp <= AXI_OKAY;
-            dma_mwr_valid <= 0;
+            host_mwr_pending <= 0;
         end else begin
-            // Accept new write request
-            if (m_axi_awvalid && m_axi_wvalid && m_axi_awready && !dma_mwr_valid) begin
-                dma_mwr_addr_r <= m_axi_awaddr;
-                dma_mwr_data_r <= m_axi_wdata;
-                dma_mwr_valid <= 1;
+            // Accept new write request from AXI master
+            if (m_axi_awvalid && m_axi_wvalid && m_axi_awready && !host_mwr_pending) begin
+                host_mwr_addr <= m_axi_awaddr;
+                host_mwr_data <= m_axi_wdata;
+                host_mwr_pending <= 1;
                 m_axi_awready <= 0;
                 m_axi_wready <= 0;
             end
 
-            // TX sent the MWr - return B response
-            if (dma_mwr_valid && dma_mwr_ready_pulse) begin
-                dma_mwr_valid <= 0;
+            // TX sent the MWr TLP - return B response
+            if (host_mwr_pending && host_mwr_ready_pulse) begin
+                host_mwr_pending <= 0;
                 m_axi_bvalid <= 1;
             end
 
-            // B handshake
+            // AXI B handshake complete
             if (m_axi_bvalid && m_axi_bready) begin
                 m_axi_bvalid <= 0;
                 m_axi_awready <= 1;
@@ -243,7 +247,7 @@ module pcie_axi_bridge
     end
 
     //=========================================================================
-    // TX Arbiter
+    // TX State Machine - Arbitrates between different TX sources
     //=========================================================================
     typedef enum logic [3:0] {
         TX_IDLE,
@@ -252,26 +256,26 @@ module pcie_axi_bridge
         TX_BAR_RD_ADDR,
         TX_BAR_RD_DATA,
         TX_BAR_CPL,
-        TX_DMA_MRD,
-        TX_DMA_MWR,
+        TX_HOST_MRD,
+        TX_HOST_MWR,
         TX_MSIX,
         TX_SEND       // Wait for tx_st_ready handshake
     } tx_state_e;
 
     tx_state_e tx_state;
 
-    // Pulses to signal DMA request consumed
-    logic dma_mrd_ready_pulse;
-    logic dma_mwr_ready_pulse;
+    // Pulses to signal host memory request consumed by TX
+    logic host_mrd_ready_pulse;
+    logic host_mwr_ready_pulse;
 
-    // BAR completion info
+    // BAR completion info (saved from RX)
     logic [15:0] bar_req_rid;
     logic [7:0]  bar_req_tag;
     logic [6:0]  bar_req_lower_addr;
     logic [63:0] bar_cpl_data;
     logic [1:0]  bar_cpl_status;
 
-    // TX registers
+    // TX header/data registers
     logic [127:0] tx_hdr_r;
     logic [63:0]  tx_data_r;
 
@@ -290,14 +294,14 @@ module pcie_axi_bridge
             tx_cpl_hdr_dec <= 0;
             tx_cpl_data_dec <= 0;
             msix_ready <= 0;
-            dma_mrd_ready_pulse <= 0;
-            dma_mwr_ready_pulse <= 0;
+            host_mrd_ready_pulse <= 0;
+            host_mwr_ready_pulse <= 0;
         end else begin
             tx_cpl_hdr_dec <= 0;
             tx_cpl_data_dec <= 0;
             msix_ready <= 0;
-            dma_mrd_ready_pulse <= 0;
-            dma_mwr_ready_pulse <= 0;
+            host_mrd_ready_pulse <= 0;
+            host_mwr_ready_pulse <= 0;
 
             case (tx_state)
                 TX_IDLE: begin
@@ -306,7 +310,7 @@ module pcie_axi_bridge
                     tx_st_sop <= 0;
                     tx_st_eop <= 0;
 
-                    // Priority: BAR > DMA MRd > DMA MWr > MSI-X
+                    // Priority: BAR requests > Host MRd > Host MWr > MSI-X
                     if (rx_is_mwr && rx_st_bar == 3'd0) begin
                         s_axi_awaddr <= rx_addr[AXI_ADDR_W-1:0];
                         s_axi_awvalid <= 1;
@@ -323,18 +327,20 @@ module pcie_axi_bridge
                         s_axi_arvalid <= 1;
                         tx_state <= TX_BAR_RD_ADDR;
                     end
-                    else if (dma_mrd_valid) begin
-                        tx_state <= TX_DMA_MRD;
+                    else if (host_mrd_pending) begin
+                        tx_state <= TX_HOST_MRD;
                     end
-                    else if (dma_mwr_valid) begin
-                        tx_state <= TX_DMA_MWR;
+                    else if (host_mwr_pending) begin
+                        tx_state <= TX_HOST_MWR;
                     end
                     else if (msix_valid) begin
                         tx_state <= TX_MSIX;
                     end
                 end
 
-                // BAR Write
+                //-------------------------------------------------------------
+                // BAR Write: Host writes to FPGA via PCIe MWr
+                //-------------------------------------------------------------
                 TX_BAR_WR_ADDR: begin
                     if (s_axi_awready) s_axi_awvalid <= 0;
                     if (s_axi_wready)  s_axi_wvalid <= 0;
@@ -352,7 +358,9 @@ module pcie_axi_bridge
                     end
                 end
 
-                // BAR Read
+                //-------------------------------------------------------------
+                // BAR Read: Host reads from FPGA via PCIe MRd -> CplD
+                //-------------------------------------------------------------
                 TX_BAR_RD_ADDR: begin
                     if (s_axi_arready) begin
                         s_axi_arvalid <= 0;
@@ -371,7 +379,7 @@ module pcie_axi_bridge
                 end
 
                 TX_BAR_CPL: begin
-                    // Set up CplD TLP header
+                    // Build CplD TLP header
                     tx_st_sop <= 1;
                     tx_st_eop <= 1;
                     tx_st_hvalid <= 1;
@@ -392,53 +400,59 @@ module pcie_axi_bridge
                     tx_state <= TX_SEND;
                 end
 
-                // DMA MRd
-                TX_DMA_MRD: begin
-                    // Set up MRd TLP header (4DW, no data)
+                //-------------------------------------------------------------
+                // Host Memory Read: FPGA reads from host via PCIe MRd
+                //-------------------------------------------------------------
+                TX_HOST_MRD: begin
+                    // Build MRd TLP header (4DW, no data)
                     tx_st_sop <= 1;
                     tx_st_eop <= 1;
                     tx_st_hvalid <= 1;
                     tx_st_dvalid <= 0;
-                    dma_mrd_ready_pulse <= 1;
+                    host_mrd_ready_pulse <= 1;
                     tx_hdr_r <= {
                         // DW0: Fmt=001 (4DW no data), Type=00000 (MRd), Length=2DW
                         {3'b001, 5'b00000, 8'b0, 6'b0, 10'd2},
                         // DW1: Requester ID (us), Tag, First/Last BE
-                        {COMPLETER_ID, dma_mrd_tag, 4'hF, 4'hF},
+                        {COMPLETER_ID, host_mrd_tag, 4'hF, 4'hF},
                         // DW2: Address[63:32]
-                        dma_mrd_addr_r[63:32],
+                        host_mrd_addr[63:32],
                         // DW3: Address[31:2], reserved
-                        {dma_mrd_addr_r[31:2], 2'b00}
+                        {host_mrd_addr[31:2], 2'b00}
                     };
                     tx_data_r <= 64'b0;
                     tx_state <= TX_SEND;
                 end
 
-                // DMA MWr
-                TX_DMA_MWR: begin
-                    // Set up MWr TLP header (4DW with data)
+                //-------------------------------------------------------------
+                // Host Memory Write: FPGA writes to host via PCIe MWr
+                //-------------------------------------------------------------
+                TX_HOST_MWR: begin
+                    // Build MWr TLP header (4DW with data)
                     tx_st_sop <= 1;
                     tx_st_eop <= 1;
                     tx_st_hvalid <= 1;
                     tx_st_dvalid <= 1;
-                    dma_mwr_ready_pulse <= 1;
+                    host_mwr_ready_pulse <= 1;
                     tx_hdr_r <= {
                         // DW0: Fmt=011 (4DW+data), Type=00000 (MWr), Length=2DW
                         {3'b011, 5'b00000, 8'b0, 6'b0, 10'd2},
                         // DW1: Requester ID (us), Tag=0, First/Last BE
                         {COMPLETER_ID, 8'h00, 4'hF, 4'hF},
                         // DW2: Address[63:32]
-                        dma_mwr_addr_r[63:32],
+                        host_mwr_addr[63:32],
                         // DW3: Address[31:2], reserved
-                        {dma_mwr_addr_r[31:2], 2'b00}
+                        {host_mwr_addr[31:2], 2'b00}
                     };
-                    tx_data_r <= dma_mwr_data_r;
+                    tx_data_r <= host_mwr_data;
                     tx_state <= TX_SEND;
                 end
 
-                // MSI-X
+                //-------------------------------------------------------------
+                // MSI-X: Send interrupt to host
+                //-------------------------------------------------------------
                 TX_MSIX: begin
-                    // Set up MSI-X MWr TLP header (4DW with 1DW data)
+                    // Build MSI-X MWr TLP header (4DW with 1DW data)
                     tx_st_sop <= 1;
                     tx_st_eop <= 1;
                     tx_st_hvalid <= 1;
@@ -458,11 +472,12 @@ module pcie_axi_bridge
                     tx_state <= TX_SEND;
                 end
 
+                //-------------------------------------------------------------
                 // TX_SEND: Wait for R-Tile to accept the TLP
+                //-------------------------------------------------------------
                 TX_SEND: begin
-                    // Hold valid signals until tx_st_ready acknowledges
                     if (tx_st_ready) begin
-                        // R-Tile accepted the TLP, deassert valid signals
+                        // R-Tile accepted the TLP
                         tx_st_hvalid <= 0;
                         tx_st_dvalid <= 0;
                         tx_st_sop <= 0;
