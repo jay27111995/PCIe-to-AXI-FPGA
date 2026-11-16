@@ -9,23 +9,19 @@
 //   5. Clear control
 //-----------------------------------------------------------------------------
 #include <verilated.h>
-#include <verilated_vcd_c.h>
 #include "Vpcie_sniffer.h"
 #include <cstdio>
 #include <cstdint>
 
 Vpcie_sniffer* dut;
-VerilatedVcdC* trace;
 int cycle = 0;
 
 void tick() {
     dut->clk = 0;
     dut->eval();
-    if (trace) trace->dump(cycle * 10);
     
     dut->clk = 1;
     dut->eval();
-    if (trace) trace->dump(cycle * 10 + 5);
     
     cycle++;
 }
@@ -64,12 +60,15 @@ uint32_t read_dbg(uint8_t addr) {
 }
 
 // Simulate an RX TLP
-void send_rx_tlp(uint32_t hdr0, uint32_t hdr1, uint32_t hdr2, uint32_t hdr3, uint64_t data) {
+void send_rx_tlp(uint32_t hdr0, uint32_t hdr1, uint32_t hdr2, uint32_t hdr3, 
+                 uint32_t data_lo, uint32_t data_hi) {
     dut->rx_st_hdr[0] = hdr0;
     dut->rx_st_hdr[1] = hdr1;
     dut->rx_st_hdr[2] = hdr2;
     dut->rx_st_hdr[3] = hdr3;
-    dut->rx_st_data[0] = data;
+    dut->rx_st_data[0] = data_lo;
+    dut->rx_st_data[1] = data_hi;
+    for (int i = 2; i < 8; i++) dut->rx_st_data[i] = 0;
     dut->rx_st_sop = 1;
     dut->rx_st_hvalid = 1;
     tick();
@@ -78,12 +77,15 @@ void send_rx_tlp(uint32_t hdr0, uint32_t hdr1, uint32_t hdr2, uint32_t hdr3, uin
 }
 
 // Simulate a TX TLP
-void send_tx_tlp(uint32_t hdr0, uint32_t hdr1, uint32_t hdr2, uint32_t hdr3, uint64_t data) {
+void send_tx_tlp(uint32_t hdr0, uint32_t hdr1, uint32_t hdr2, uint32_t hdr3,
+                 uint32_t data_lo, uint32_t data_hi) {
     dut->tx_st_hdr[0] = hdr0;
     dut->tx_st_hdr[1] = hdr1;
     dut->tx_st_hdr[2] = hdr2;
     dut->tx_st_hdr[3] = hdr3;
-    dut->tx_st_data[0] = data;
+    dut->tx_st_data[0] = data_lo;
+    dut->tx_st_data[1] = data_hi;
+    for (int i = 2; i < 8; i++) dut->tx_st_data[i] = 0;
     dut->tx_st_sop = 1;
     dut->tx_st_hvalid = 1;
     tick();
@@ -103,9 +105,10 @@ bool test_rx_capture() {
     uint32_t dw1 = (0x0100 << 16) | (0x42 << 8) | 0xFF;  // RID=0x100, Tag=0x42
     uint32_t dw2 = 0x12340000;  // Address
     uint32_t dw3 = 0;
-    uint64_t data = 0xDEADBEEFCAFEBABEULL;
+    uint32_t data_lo = 0xCAFEBABE;
+    uint32_t data_hi = 0xDEADBEEF;
     
-    send_rx_tlp(dw2, dw1, dw0, dw3, data);
+    send_rx_tlp(dw2, dw1, dw0, dw3, data_lo, data_hi);
     tick(); tick();
     
     // Check status register
@@ -135,12 +138,13 @@ bool test_rx_capture() {
     }
     
     // Check last_rx_data
-    uint32_t data_lo = read_dbg(0x20);
-    uint32_t data_hi = read_dbg(0x24);
-    uint64_t captured_data = ((uint64_t)data_hi << 32) | data_lo;
+    uint32_t captured_lo = read_dbg(0x20);
+    uint32_t captured_hi = read_dbg(0x24);
     
-    if (captured_data != data) {
-        printf("  [X] last_rx_data mismatch: 0x%lx\n", captured_data);
+    if (captured_lo != data_lo || captured_hi != data_hi) {
+        printf("  [X] last_rx_data mismatch\n");
+        printf("      Expected: 0x%08x 0x%08x\n", data_lo, data_hi);
+        printf("      Got:      0x%08x 0x%08x\n", captured_lo, captured_hi);
         return false;
     }
     
@@ -156,9 +160,10 @@ bool test_tx_capture() {
     uint32_t dw1 = (0xb400 << 16) | 8;  // Completer ID, byte count
     uint32_t dw2 = (0x0100 << 16) | (0x42 << 8);  // RID, Tag
     uint32_t dw3 = 0;
-    uint64_t data = 0x1234567890ABCDEFULL;
+    uint32_t data_lo = 0x90ABCDEF;
+    uint32_t data_hi = 0x12345678;
     
-    send_tx_tlp(dw2, dw1, dw0, dw3, data);
+    send_tx_tlp(dw2, dw1, dw0, dw3, data_lo, data_hi);
     tick(); tick();
     
     // Check status register
@@ -186,12 +191,13 @@ bool test_tx_capture() {
     }
     
     // Check last_tx_data
-    uint32_t data_lo = read_dbg(0x38);
-    uint32_t data_hi = read_dbg(0x3C);
-    uint64_t captured_data = ((uint64_t)data_hi << 32) | data_lo;
+    uint32_t captured_lo = read_dbg(0x38);
+    uint32_t captured_hi = read_dbg(0x3C);
     
-    if (captured_data != data) {
-        printf("  [X] last_tx_data mismatch: 0x%lx\n", captured_data);
+    if (captured_lo != data_lo || captured_hi != data_hi) {
+        printf("  [X] last_tx_data mismatch\n");
+        printf("      Expected: 0x%08x 0x%08x\n", data_lo, data_hi);
+        printf("      Got:      0x%08x 0x%08x\n", captured_lo, captured_hi);
         return false;
     }
     
@@ -285,12 +291,8 @@ bool test_default_value() {
 
 int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
-    Verilated::traceEverOn(true);
     
     dut = new Vpcie_sniffer;
-    trace = new VerilatedVcdC;
-    dut->trace(trace, 99);
-    trace->open("tb_pcie_sniffer.vcd");
     
     printf("=== PCIe Sniffer Testbench ===\n\n");
     
@@ -317,7 +319,6 @@ int main(int argc, char** argv) {
     
     printf("\n=== Results: %d/%d tests passed ===\n", passed, total);
     
-    trace->close();
     delete dut;
     
     return (passed == total) ? 0 : 1;
