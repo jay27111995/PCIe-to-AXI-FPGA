@@ -1,5 +1,0 @@
-22 serialization::archive 20 0 1 0 0 4 0 0 0 17 dms:cdms:sub_type 0 0 1 0
-0 5 6 design 28 dms:cdms:implicit_partitions
-1 5 0  34 dms:cdms:sld_ipgenerated_sdc_files
-2 5 176 /home/eelljay/PCIe-to-AXI-FPGA/build/dni/sandboxes/seroiuts01500_941117_0/sld/ipgen/alt_sld_fab_0/altera_internal_oscillator_atom_1912/synth/altera_internal_oscillator_atom.sdc 19 dms:property:top_db
-3 5 14 root_partition

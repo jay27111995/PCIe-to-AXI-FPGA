@@ -1,9 +1,0 @@
-Synthesis Status : Successful - Sat Nov 14 20:00:13 2026
-Revision Name : pcie_bridge
-Top-level Entity Name : pcie_bridge
-Family : Agilex 7
-Quartus Prime Version : 25.3.1 Build 100 12/19/2025 Patches 1.02,1.01 SC Pro Edition
-Device : AGIB027R29A1E1VB
-Logic utilization estimate (in ALMs) : 6,865 / 912,800 ( < 1 % )
-Total dedicated logic registers : 16392
-Estimated DSP Blocks Post-Merging : 0
