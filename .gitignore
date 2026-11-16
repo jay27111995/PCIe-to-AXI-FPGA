@@ -16,3 +16,16 @@ build/incremental_db/
 build/output_files/
 *.qws
 *.bak
+
+# Quartus build artifacts
+build/qdb/
+build/dni/
+build/ip/
+build/output_files/
+build/tmp-clearbox/
+build/*.sv
+*.sof
+
+# Host binaries
+host/test_bridge
+host/dump_debug

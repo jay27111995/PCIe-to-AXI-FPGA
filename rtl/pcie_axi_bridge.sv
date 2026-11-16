@@ -14,7 +14,10 @@ module pcie_axi_bridge
     import rtile_pkg::*;
 #(
     parameter int AXI_ADDR_W = 32,
-    parameter int AXI_DATA_W = 64
+    parameter int AXI_DATA_W = 64,
+    // Completer ID (BDF) - set to match actual PCIe slot assignment
+    // Default 0xb400 = bus 0xb4, device 0, function 0 (dut19)
+    parameter logic [15:0] COMPLETER_ID = 16'hb400
 )(
     input  logic clk,
     input  logic rst_n,
@@ -106,10 +109,16 @@ module pcie_axi_bridge
     input  logic        msix_valid,
     output logic        msix_ready,
     input  logic [63:0] msix_addr,
-    input  logic [31:0] msix_data
+    input  logic [31:0] msix_data,
+
+    //=========================================================================
+    // Debug Interface
+    //=========================================================================
+    output logic [3:0]  dbg_tx_state
 );
 
-    assign rx_st_ready = 1'b1;
+    // rx_st_ready is only asserted when we're ready to accept new TLPs
+    // This is managed by the state machine
 
     //=========================================================================
     // Credit Manager
@@ -245,7 +254,8 @@ module pcie_axi_bridge
         TX_BAR_CPL,
         TX_DMA_MRD,
         TX_DMA_MWR,
-        TX_MSIX
+        TX_MSIX,
+        TX_SEND       // Wait for tx_st_ready handshake
     } tx_state_e;
 
     tx_state_e tx_state;
@@ -361,79 +371,105 @@ module pcie_axi_bridge
                 end
 
                 TX_BAR_CPL: begin
-                    if (tx_st_ready && !tx_st_hvalid) begin
-                        tx_st_sop <= 1;
-                        tx_st_eop <= 1;
-                        tx_st_hvalid <= 1;
-                        tx_st_dvalid <= 1;
-                        tx_cpl_hdr_dec <= 1;
-                        tx_cpl_data_dec <= 1;
-                        tx_hdr_r <= {
-                            {3'b010, 5'b01010, 8'b0, 6'b0, 10'd2},
-                            {16'h0100, (bar_cpl_status == AXI_OKAY) ? 3'b000 : 3'b001, 1'b0, 12'd8},
-                            {bar_req_rid, bar_req_tag, 1'b0, bar_req_lower_addr},
-                            32'b0
-                        };
-                        tx_data_r <= bar_cpl_data;
-                        tx_state <= TX_IDLE;
-                    end
+                    // Set up CplD TLP header
+                    tx_st_sop <= 1;
+                    tx_st_eop <= 1;
+                    tx_st_hvalid <= 1;
+                    tx_st_dvalid <= 1;
+                    tx_cpl_hdr_dec <= 1;
+                    tx_cpl_data_dec <= 1;
+                    tx_hdr_r <= {
+                        // DW0: Fmt=010 (3DW+data), Type=01010 (CplD), Length=2DW
+                        {3'b010, 5'b01010, 8'b0, 6'b0, 10'd2},
+                        // DW1: Completer ID, Status, Byte Count (8 bytes)
+                        {COMPLETER_ID, (bar_cpl_status == AXI_OKAY) ? 3'b000 : 3'b001, 1'b0, 12'd8},
+                        // DW2: Requester ID, Tag, Lower Address
+                        {bar_req_rid, bar_req_tag, 1'b0, bar_req_lower_addr},
+                        // DW3: unused for 3DW header
+                        32'b0
+                    };
+                    tx_data_r <= bar_cpl_data;
+                    tx_state <= TX_SEND;
                 end
 
                 // DMA MRd
                 TX_DMA_MRD: begin
-                    if (tx_st_ready && !tx_st_hvalid) begin
-                        tx_st_sop <= 1;
-                        tx_st_eop <= 1;
-                        tx_st_hvalid <= 1;
-                        tx_st_dvalid <= 0;
-                        dma_mrd_ready_pulse <= 1;
-                        tx_hdr_r <= {
-                            {3'b001, 5'b00000, 8'b0, 6'b0, 10'd2},
-                            {16'h0100, dma_mrd_tag, 4'hF, 4'hF},
-                            dma_mrd_addr_r[63:32],
-                            {dma_mrd_addr_r[31:2], 2'b00}
-                        };
-                        tx_data_r <= 64'b0;
-                        tx_state <= TX_IDLE;
-                    end
+                    // Set up MRd TLP header (4DW, no data)
+                    tx_st_sop <= 1;
+                    tx_st_eop <= 1;
+                    tx_st_hvalid <= 1;
+                    tx_st_dvalid <= 0;
+                    dma_mrd_ready_pulse <= 1;
+                    tx_hdr_r <= {
+                        // DW0: Fmt=001 (4DW no data), Type=00000 (MRd), Length=2DW
+                        {3'b001, 5'b00000, 8'b0, 6'b0, 10'd2},
+                        // DW1: Requester ID (us), Tag, First/Last BE
+                        {COMPLETER_ID, dma_mrd_tag, 4'hF, 4'hF},
+                        // DW2: Address[63:32]
+                        dma_mrd_addr_r[63:32],
+                        // DW3: Address[31:2], reserved
+                        {dma_mrd_addr_r[31:2], 2'b00}
+                    };
+                    tx_data_r <= 64'b0;
+                    tx_state <= TX_SEND;
                 end
 
                 // DMA MWr
                 TX_DMA_MWR: begin
-                    if (tx_st_ready && !tx_st_hvalid) begin
-                        tx_st_sop <= 1;
-                        tx_st_eop <= 1;
-                        tx_st_hvalid <= 1;
-                        tx_st_dvalid <= 1;
-                        dma_mwr_ready_pulse <= 1;
-                        tx_hdr_r <= {
-                            {3'b011, 5'b00000, 8'b0, 6'b0, 10'd2},
-                            {16'h0100, 8'h00, 4'hF, 4'hF},
-                            dma_mwr_addr_r[63:32],
-                            {dma_mwr_addr_r[31:2], 2'b00}
-                        };
-                        tx_data_r <= dma_mwr_data_r;
-                        tx_state <= TX_IDLE;
-                    end
+                    // Set up MWr TLP header (4DW with data)
+                    tx_st_sop <= 1;
+                    tx_st_eop <= 1;
+                    tx_st_hvalid <= 1;
+                    tx_st_dvalid <= 1;
+                    dma_mwr_ready_pulse <= 1;
+                    tx_hdr_r <= {
+                        // DW0: Fmt=011 (4DW+data), Type=00000 (MWr), Length=2DW
+                        {3'b011, 5'b00000, 8'b0, 6'b0, 10'd2},
+                        // DW1: Requester ID (us), Tag=0, First/Last BE
+                        {COMPLETER_ID, 8'h00, 4'hF, 4'hF},
+                        // DW2: Address[63:32]
+                        dma_mwr_addr_r[63:32],
+                        // DW3: Address[31:2], reserved
+                        {dma_mwr_addr_r[31:2], 2'b00}
+                    };
+                    tx_data_r <= dma_mwr_data_r;
+                    tx_state <= TX_SEND;
                 end
 
                 // MSI-X
                 TX_MSIX: begin
-                    if (tx_st_ready && !tx_st_hvalid) begin
-                        tx_st_sop <= 1;
-                        tx_st_eop <= 1;
-                        tx_st_hvalid <= 1;
-                        tx_st_dvalid <= 1;
-                        msix_ready <= 1;
-                        tx_hdr_r <= {
-                            {3'b011, 5'b00000, 8'b0, 6'b0, 10'd1},
-                            {16'h0100, 8'h00, 4'hF, 4'hF},
-                            msix_addr[63:32],
-                            {msix_addr[31:2], 2'b00}
-                        };
-                        tx_data_r <= {32'b0, msix_data};
+                    // Set up MSI-X MWr TLP header (4DW with 1DW data)
+                    tx_st_sop <= 1;
+                    tx_st_eop <= 1;
+                    tx_st_hvalid <= 1;
+                    tx_st_dvalid <= 1;
+                    msix_ready <= 1;
+                    tx_hdr_r <= {
+                        // DW0: Fmt=011 (4DW+data), Type=00000 (MWr), Length=1DW
+                        {3'b011, 5'b00000, 8'b0, 6'b0, 10'd1},
+                        // DW1: Requester ID (us), Tag=0, First/Last BE
+                        {COMPLETER_ID, 8'h00, 4'hF, 4'hF},
+                        // DW2: MSI-X address[63:32]
+                        msix_addr[63:32],
+                        // DW3: MSI-X address[31:2], reserved
+                        {msix_addr[31:2], 2'b00}
+                    };
+                    tx_data_r <= {32'b0, msix_data};
+                    tx_state <= TX_SEND;
+                end
+
+                // TX_SEND: Wait for R-Tile to accept the TLP
+                TX_SEND: begin
+                    // Hold valid signals until tx_st_ready acknowledges
+                    if (tx_st_ready) begin
+                        // R-Tile accepted the TLP, deassert valid signals
+                        tx_st_hvalid <= 0;
+                        tx_st_dvalid <= 0;
+                        tx_st_sop <= 0;
+                        tx_st_eop <= 0;
                         tx_state <= TX_IDLE;
                     end
+                    // Keep valid signals asserted while waiting
                 end
             endcase
         end
@@ -444,5 +480,11 @@ module pcie_axi_bridge
     //=========================================================================
     assign tx_st_hdr = tx_hdr_r;
     assign tx_st_data = {192'b0, tx_data_r};
+    
+    // Only accept new RX TLPs when in IDLE state
+    assign rx_st_ready = (tx_state == TX_IDLE);
+    
+    // Debug output
+    assign dbg_tx_state = tx_state;
 
 endmodule

@@ -4,9 +4,10 @@
 // Memory map (BAR0):
 //   0x0000-0x0FFF: DMA engine registers
 //   0x1000-0x1FFF: Local RAM (4KB)
+//   0x2000-0x2FFF: Debug/Sniffer registers (read-only)
 //
 // Architecture:
-//   Host ─PCIe─► pcie_axi_bridge ─AXI─► [DMA regs | RAM]
+//   Host ─PCIe─► pcie_axi_bridge ─AXI─► [DMA regs | RAM | Debug]
 //                      ▲
 //                      │ AXI Master
 //                      │
@@ -119,6 +120,10 @@ module top
     logic [31:0] msix_data_i;
     logic        dma_irq_req;
 
+    // Debug signals
+    logic [3:0]  dbg_tx_state;
+    logic [31:0] dbg_rdata;
+
     //=========================================================================
     // PCIe-AXI Bridge
     //=========================================================================
@@ -149,14 +154,29 @@ module top
         .m_axi_rdata(dma_host_rdata), .m_axi_rresp(dma_host_rresp), .m_axi_rvalid(dma_host_rvalid), .m_axi_rready(dma_host_rready),
         // MSI-X
         .msix_valid(msix_valid_i), .msix_ready(msix_ready_i),
-        .msix_addr(msix_addr_i), .msix_data(msix_data_i)
+        .msix_addr(msix_addr_i), .msix_data(msix_data_i),
+        // Debug
+        .dbg_tx_state(dbg_tx_state)
     );
 
     //=========================================================================
-    // Address Decode: 0x0xxx=DMA regs, 0x1xxx=RAM
+    // PCIe Sniffer (Debug)
     //=========================================================================
-    wire wr_to_ram = brg_awaddr[12];
-    wire rd_to_ram = brg_araddr[12];
+    pcie_sniffer u_sniffer (
+        .clk, .rst_n,
+        .rx_st_hdr, .rx_st_data, .rx_st_sop, .rx_st_hvalid, .rx_st_ready,
+        .tx_st_hdr, .tx_st_data, .tx_st_sop, .tx_st_hvalid, .tx_st_ready,
+        .tx_state(dbg_tx_state),
+        .dbg_addr(brg_araddr[7:0]),
+        .dbg_rdata(dbg_rdata)
+    );
+
+    //=========================================================================
+    // Address Decode: 0x0xxx=DMA, 0x1xxx=RAM, 0x2xxx=Debug
+    //=========================================================================
+    wire wr_to_ram = brg_awaddr[12] && !brg_awaddr[13];  // 0x1xxx
+    wire rd_to_ram = brg_araddr[12] && !brg_araddr[13];  // 0x1xxx
+    wire rd_to_dbg = brg_araddr[13];                      // 0x2xxx
 
     // Write path
     assign dma_s_awaddr  = brg_awaddr;
@@ -178,19 +198,44 @@ module top
     assign brg_bvalid  = dma_s_bvalid | ram_bar_bvalid;
     assign brg_bresp   = dma_s_bvalid ? dma_s_bresp : ram_bar_bresp;
 
-    // Read path
+    // Read path - with debug register support
     assign dma_s_araddr  = brg_araddr;
-    assign dma_s_arvalid = brg_arvalid && !rd_to_ram;
+    assign dma_s_arvalid = brg_arvalid && !rd_to_ram && !rd_to_dbg;
     assign dma_s_rready  = brg_rready;
 
     assign ram_bar_araddr  = brg_araddr;
     assign ram_bar_arvalid = brg_arvalid && rd_to_ram;
     assign ram_bar_rready  = brg_rready;
 
-    assign brg_arready = rd_to_ram ? ram_bar_arready : dma_s_arready;
-    assign brg_rvalid  = dma_s_rvalid | ram_bar_rvalid;
-    assign brg_rdata   = dma_s_rvalid ? dma_s_rdata : ram_bar_rdata;
-    assign brg_rresp   = dma_s_rvalid ? dma_s_rresp : ram_bar_rresp;
+    // Debug reads - hold rvalid until rready (proper AXI handshake)
+    // NOTE: brg_arready=1 combinationally for debug, so handshake completes same cycle.
+    // We must trigger on the handshake (arvalid && arready) not just arvalid.
+    logic        dbg_rvalid;
+    logic [63:0] dbg_rdata_ext;
+    logic [31:0] dbg_rdata_latched;
+    wire         dbg_ar_handshake = brg_arvalid && brg_arready && rd_to_dbg;
+    
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            dbg_rvalid <= 0;
+            dbg_rdata_latched <= 0;
+        end else begin
+            if (dbg_ar_handshake && !dbg_rvalid) begin
+                // Address handshake completed for debug read - latch data and assert valid
+                dbg_rvalid <= 1;
+                dbg_rdata_latched <= dbg_rdata;
+            end else if (dbg_rvalid && brg_rready) begin
+                // Data handshake complete - deassert valid
+                dbg_rvalid <= 0;
+            end
+        end
+    end
+    assign dbg_rdata_ext = {32'b0, dbg_rdata_latched};  // Zero-extend to 64 bits
+
+    assign brg_arready = rd_to_dbg ? 1'b1 : (rd_to_ram ? ram_bar_arready : dma_s_arready);
+    assign brg_rvalid  = dma_s_rvalid | ram_bar_rvalid | dbg_rvalid;
+    assign brg_rdata   = dma_s_rvalid ? dma_s_rdata : (ram_bar_rvalid ? ram_bar_rdata : dbg_rdata_ext);
+    assign brg_rresp   = dma_s_rvalid ? dma_s_rresp : (ram_bar_rvalid ? ram_bar_rresp : 2'b00);
 
     //=========================================================================
     // DMA Engine
