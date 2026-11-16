@@ -1,4 +1,4 @@
-package require -exact qsys 25.3.1
+package require qsys
 
 # create the system "pcie_bridge"
 proc do_create_pcie_bridge {} {

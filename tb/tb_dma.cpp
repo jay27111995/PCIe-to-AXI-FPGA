@@ -136,12 +136,12 @@ int main(int argc, char** argv) {
     reg_write(0x10, 0x123456789ABCDEF0);
     reg_write(0x18, 0x1000);
     reg_write(0x20, 64);
-    if (reg_read(0x10) == 0x123456789ABCDEF0) { printf("  ✓ host_addr\n"); pass++; }
-    else { printf("  ✗ host_addr\n"); fail++; }
-    if (reg_read(0x18) == 0x1000) { printf("  ✓ local_addr\n"); pass++; }
-    else { printf("  ✗ local_addr\n"); fail++; }
-    if (reg_read(0x20) == 64) { printf("  ✓ length\n"); pass++; }
-    else { printf("  ✗ length\n"); fail++; }
+    if (reg_read(0x10) == 0x123456789ABCDEF0) { printf("  [OK] host_addr\n"); pass++; }
+    else { printf("  [X] host_addr\n"); fail++; }
+    if (reg_read(0x18) == 0x1000) { printf("  [OK] local_addr\n"); pass++; }
+    else { printf("  [X] local_addr\n"); fail++; }
+    if (reg_read(0x20) == 64) { printf("  [OK] length\n"); pass++; }
+    else { printf("  [X] length\n"); fail++; }
     
     // Test 2: H2C
     printf("\nTest 2: H2C 8 bytes\n");
@@ -152,9 +152,9 @@ int main(int argc, char** argv) {
     reg_write(0x20, 8);
     reg_write(0x00, 0x1);
     if (wait_done() && local_mem[0x100] == 0xCAFEBABEDEADBEEF) {
-        printf("  ✓ PASS\n"); pass++;
+        printf("  [OK] PASS\n"); pass++;
     } else {
-        printf("  ✗ FAIL (0x%lx)\n", local_mem[0x100]); fail++;
+        printf("  [X] FAIL (0x%lx)\n", local_mem[0x100]); fail++;
     }
     
     // Test 3: C2H
@@ -166,9 +166,9 @@ int main(int argc, char** argv) {
     reg_write(0x20, 8);
     reg_write(0x00, 0x3);
     if (wait_done() && host_mem[0x3000] == 0x1111222233334444) {
-        printf("  ✓ PASS\n"); pass++;
+        printf("  [OK] PASS\n"); pass++;
     } else {
-        printf("  ✗ FAIL (0x%lx)\n", host_mem[0x3000]); fail++;
+        printf("  [X] FAIL (0x%lx)\n", host_mem[0x3000]); fail++;
     }
     
     // Test 4: H2C multi-beat
@@ -185,8 +185,8 @@ int main(int argc, char** argv) {
               local_mem[0x300] == 0xAAAAAAAAAAAAAAAA &&
               local_mem[0x308] == 0xBBBBBBBBBBBBBBBB &&
               local_mem[0x310] == 0xCCCCCCCCCCCCCCCC;
-    if (ok) { printf("  ✓ PASS\n"); pass++; }
-    else { printf("  ✗ FAIL\n"); fail++; }
+    if (ok) { printf("  [OK] PASS\n"); pass++; }
+    else { printf("  [X] FAIL\n"); fail++; }
     
     // Test 5: C2H multi-beat
     printf("\nTest 5: C2H 24 bytes\n");
@@ -202,8 +202,8 @@ int main(int argc, char** argv) {
          host_mem[0x5000] == 0x1111111111111111 &&
          host_mem[0x5008] == 0x2222222222222222 &&
          host_mem[0x5010] == 0x3333333333333333;
-    if (ok) { printf("  ✓ PASS\n"); pass++; }
-    else { printf("  ✗ FAIL\n"); fail++; }
+    if (ok) { printf("  [OK] PASS\n"); pass++; }
+    else { printf("  [X] FAIL\n"); fail++; }
     
     printf("\n=== Results: %d passed, %d failed ===\n", pass, fail);
     delete dut;

@@ -140,9 +140,9 @@ int main(int argc, char** argv) {
     if (!axi_read(0x1000, &rdata)) { fail++; goto test2; }
     
     if (rdata == 0xCAFEBABE12345678ULL) {
-        printf("  ✓ PASS\n"); pass++;
+        printf("  [OK] PASS\n"); pass++;
     } else {
-        printf("  ✗ FAIL: expected 0xCAFEBABE12345678, got 0x%016lx\n", rdata);
+        printf("  [X] FAIL: expected 0xCAFEBABE12345678, got 0x%016lx\n", rdata);
         fail++;
     }
 
@@ -159,19 +159,19 @@ test2:
     if (!axi_write(0x1018, 0x4444444444444444ULL)) { fail++; goto test3; }
     
     if (!axi_read(0x1018, &rdata) || rdata != 0x4444444444444444ULL) {
-        printf("  ✗ FAIL at 0x1018: got 0x%016lx\n", rdata); fail++; goto test3;
+        printf("  [X] FAIL at 0x1018: got 0x%016lx\n", rdata); fail++; goto test3;
     }
     if (!axi_read(0x1000, &rdata) || rdata != 0x1111111111111111ULL) {
-        printf("  ✗ FAIL at 0x1000: got 0x%016lx\n", rdata); fail++; goto test3;
+        printf("  [X] FAIL at 0x1000: got 0x%016lx\n", rdata); fail++; goto test3;
     }
     if (!axi_read(0x1010, &rdata) || rdata != 0x3333333333333333ULL) {
-        printf("  ✗ FAIL at 0x1010: got 0x%016lx\n", rdata); fail++; goto test3;
+        printf("  [X] FAIL at 0x1010: got 0x%016lx\n", rdata); fail++; goto test3;
     }
     if (!axi_read(0x1008, &rdata) || rdata != 0x2222222222222222ULL) {
-        printf("  ✗ FAIL at 0x1008: got 0x%016lx\n", rdata); fail++; goto test3;
+        printf("  [X] FAIL at 0x1008: got 0x%016lx\n", rdata); fail++; goto test3;
     }
     
-    printf("  ✓ PASS\n"); pass++;
+    printf("  [OK] PASS\n"); pass++;
 
 test3:
     //=========================================================================
@@ -185,9 +185,9 @@ test3:
     if (!axi_read(0x1000, &rdata)) { fail++; goto test4; }
     
     if (rdata == 0xFFFFFFFFDEADBEEFULL) {
-        printf("  ✓ PASS\n"); pass++;
+        printf("  [OK] PASS\n"); pass++;
     } else {
-        printf("  ✗ FAIL: expected 0xFFFFFFFFDEADBEEF, got 0x%016lx\n", rdata);
+        printf("  [X] FAIL: expected 0xFFFFFFFFDEADBEEF, got 0x%016lx\n", rdata);
         fail++;
     }
 
@@ -204,13 +204,13 @@ test4:
     if (!axi_write(0x1FF8, 0x2222000000000002ULL)) { fail++; goto test5; }
     
     if (!axi_read(0x1000, &rdata) || rdata != 0x1111000000000001ULL) {
-        printf("  ✗ FAIL at first addr: got 0x%016lx\n", rdata); fail++; goto test5;
+        printf("  [X] FAIL at first addr: got 0x%016lx\n", rdata); fail++; goto test5;
     }
     if (!axi_read(0x1FF8, &rdata) || rdata != 0x2222000000000002ULL) {
-        printf("  ✗ FAIL at last addr: got 0x%016lx\n", rdata); fail++; goto test5;
+        printf("  [X] FAIL at last addr: got 0x%016lx\n", rdata); fail++; goto test5;
     }
     
-    printf("  ✓ PASS\n"); pass++;
+    printf("  [OK] PASS\n"); pass++;
 
 test5:
     //=========================================================================
@@ -244,13 +244,13 @@ test5:
         }
         
         if (rdata != expected) {
-            printf("  ✗ FAIL strb=0x%02x: expected 0x%016lx, got 0x%016lx\n", 
+            printf("  [X] FAIL strb=0x%02x: expected 0x%016lx, got 0x%016lx\n", 
                    strb, expected, rdata);
             ok = false;
         }
     }
     
-    if (ok) { printf("  ✓ PASS\n"); pass++; }
+    if (ok) { printf("  [OK] PASS\n"); pass++; }
     else { fail++; }
 
 test6:
@@ -267,13 +267,13 @@ test6:
     ok = true;
     for (i = 0; i < 64; i++) {
         if (!axi_read(0x1000 + i*8, &rdata) || rdata != (uint64_t)(0x1000 + i)) {
-            printf("  ✗ FAIL at offset %d: expected 0x%lx, got 0x%016lx\n", 
+            printf("  [X] FAIL at offset %d: expected 0x%lx, got 0x%016lx\n", 
                    i, (uint64_t)(0x1000+i), rdata);
             ok = false; break;
         }
     }
     
-    if (ok) { printf("  ✓ PASS\n"); pass++; }
+    if (ok) { printf("  [OK] PASS\n"); pass++; }
     else { fail++; }
 
 test7:
@@ -290,12 +290,12 @@ test7:
     ok = true;
     for (i = 0; i < 64; i++) {
         if (!axi_read(0x1000 + i*8, &rdata) || rdata != (uint64_t)(0xA000 + i)) {
-            printf("  ✗ FAIL at offset %d\n", i);
+            printf("  [X] FAIL at offset %d\n", i);
             ok = false; break;
         }
     }
     
-    if (ok) { printf("  ✓ PASS\n"); pass++; }
+    if (ok) { printf("  [OK] PASS\n"); pass++; }
     else { fail++; }
 
 test8:
@@ -323,14 +323,14 @@ test8:
     
     // rvalid should be high, data waiting
     if (!dut->s_axi_rvalid) {
-        printf("  ✗ FAIL: rvalid not asserted\n"); fail++; goto test9;
+        printf("  [X] FAIL: rvalid not asserted\n"); fail++; goto test9;
     }
     
     // Hold for a few cycles (data should persist)
     tick(); tick(); tick();
     
     if (!dut->s_axi_rvalid) {
-        printf("  ✗ FAIL: rvalid dropped before rready\n"); fail++; goto test9;
+        printf("  [X] FAIL: rvalid dropped before rready\n"); fail++; goto test9;
     }
     
     // Now assert rready
@@ -339,9 +339,9 @@ test8:
     tick();
     
     if (rdata == 0xBACCBACCBACCBACCULL) {
-        printf("  ✓ PASS\n"); pass++;
+        printf("  [OK] PASS\n"); pass++;
     } else {
-        printf("  ✗ FAIL: expected 0xBACCBACCBACCBACC, got 0x%016lx\n", rdata);
+        printf("  [X] FAIL: expected 0xBACCBACCBACCBACC, got 0x%016lx\n", rdata);
         fail++;
     }
 
@@ -370,14 +370,14 @@ test9:
     for (i = 0; i < 20 && !dut->s_axi_bvalid; i++) tick();
     
     if (!dut->s_axi_bvalid) {
-        printf("  ✗ FAIL: bvalid not asserted\n"); fail++; goto test10;
+        printf("  [X] FAIL: bvalid not asserted\n"); fail++; goto test10;
     }
     
     // Hold bready low
     tick(); tick(); tick();
     
     if (!dut->s_axi_bvalid) {
-        printf("  ✗ FAIL: bvalid dropped before bready\n"); fail++; goto test10;
+        printf("  [X] FAIL: bvalid dropped before bready\n"); fail++; goto test10;
     }
     
     // Now assert bready
@@ -388,9 +388,9 @@ test9:
     if (!axi_read(0x1300, &rdata)) { fail++; goto test10; }
     
     if (rdata == 0xABCDABCDABCDABCDULL) {
-        printf("  ✓ PASS\n"); pass++;
+        printf("  [OK] PASS\n"); pass++;
     } else {
-        printf("  ✗ FAIL: data not written correctly, got 0x%016lx\n", rdata);
+        printf("  [X] FAIL: data not written correctly, got 0x%016lx\n", rdata);
         fail++;
     }
 
@@ -412,16 +412,16 @@ test10:
     
     // Should be able to do transactions after reset
     if (!axi_write(0x1400, 0xAFAFAFAFAFAFAFAFULL)) { 
-        printf("  ✗ FAIL: write after reset failed\n"); fail++; goto test11; 
+        printf("  [X] FAIL: write after reset failed\n"); fail++; goto test11; 
     }
     if (!axi_read(0x1400, &rdata)) { 
-        printf("  ✗ FAIL: read after reset failed\n"); fail++; goto test11; 
+        printf("  [X] FAIL: read after reset failed\n"); fail++; goto test11; 
     }
     
     if (rdata == 0xAFAFAFAFAFAFAFAFULL) {
-        printf("  ✓ PASS\n"); pass++;
+        printf("  [OK] PASS\n"); pass++;
     } else {
-        printf("  ✗ FAIL: expected 0xAFAFAFAFAFAFAFAF, got 0x%016lx\n", rdata);
+        printf("  [X] FAIL: expected 0xAFAFAFAFAFAFAFAF, got 0x%016lx\n", rdata);
         fail++;
     }
 
@@ -455,14 +455,14 @@ test11:
             // Read (only read addresses we've written)
             if (!axi_read(addr, &rdata)) { ok = false; break; }
             if (rdata != shadow[idx]) {
-                printf("  ✗ FAIL at op %d, addr 0x%x: expected 0x%016lx, got 0x%016lx\n",
+                printf("  [X] FAIL at op %d, addr 0x%x: expected 0x%016lx, got 0x%016lx\n",
                        i, addr, shadow[idx], rdata);
                 ok = false;
             }
         }
     }
     
-    if (ok) { printf("  ✓ PASS\n"); pass++; }
+    if (ok) { printf("  [OK] PASS\n"); pass++; }
     else { fail++; }
 
 done:

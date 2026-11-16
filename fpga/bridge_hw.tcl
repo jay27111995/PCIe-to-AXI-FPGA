@@ -12,7 +12,7 @@
 #
 # request TCL package from ACDS 25.3.1
 #
-package require -exact qsys 25.3.1
+package require qsys
 
 
 #
@@ -47,6 +47,7 @@ add_fileset_file axi_bridge_hw.sv SYSTEM_VERILOG PATH axi_bridge_hw.sv TOP_LEVEL
 add_fileset_file rtile_pkg.sv SYSTEM_VERILOG PATH rtile_pkg.sv
 add_fileset_file rtile_crdt.sv SYSTEM_VERILOG PATH rtile_crdt.sv
 add_fileset_file pcie_axi_bridge.sv SYSTEM_VERILOG PATH pcie_axi_bridge.sv
+add_fileset_file pcie_sniffer.sv SYSTEM_VERILOG PATH pcie_sniffer.sv
 add_fileset_file axi_ram.sv SYSTEM_VERILOG PATH axi_ram.sv
 add_fileset_file dma_engine.sv SYSTEM_VERILOG PATH dma_engine.sv
 add_fileset_file top.sv SYSTEM_VERILOG PATH top.sv

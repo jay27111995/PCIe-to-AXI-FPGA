@@ -35,9 +35,9 @@ int main(int argc, char* argv[]) {
     uint64_t read_val = bar.read64(RAM_BASE);
     
     if (read_val == test_val) {
-        printf("  ✓ PASS: 0x%016lx\n", read_val);
+        printf("  [OK] PASS: 0x%016lx\n", read_val);
     } else {
-        printf("  ✗ FAIL: wrote 0x%016lx, read 0x%016lx\n", test_val, read_val);
+        printf("  [X] FAIL: wrote 0x%016lx, read 0x%016lx\n", test_val, read_val);
         return 1;
     }
 
@@ -52,7 +52,7 @@ int main(int argc, char* argv[]) {
     for (int i = 0; i < 8; i++) {
         uint64_t val = bar.read64(RAM_BASE + i*8);
         bool ok = (val == 0xA000ULL + i);
-        printf("  [0x%04x] = 0x%016lx %s\n", RAM_BASE + i*8, val, ok ? "✓" : "✗");
+        printf("  [0x%04x] = 0x%016lx %s\n", RAM_BASE + i*8, val, ok ? "[OK]" : "[X]");
         if (!ok) pass = false;
     }
     if (!pass) return 1;
@@ -72,10 +72,10 @@ int main(int argc, char* argv[]) {
     if (host_addr == 0x123456789ABCDEF0ULL && 
         local_addr == 0x1234 && 
         length == 64) {
-        printf("  ✓ PASS: host=0x%lx, local=0x%lx, len=%lu\n", 
+        printf("  [OK] PASS: host=0x%lx, local=0x%lx, len=%lu\n", 
                host_addr, local_addr, length);
     } else {
-        printf("  ✗ FAIL: register readback mismatch\n");
+        printf("  [X] FAIL: register readback mismatch\n");
         return 1;
     }
 
@@ -91,4 +91,37 @@ int main(int argc, char* argv[]) {
     printf("\nNote: Full DMA testing requires VFIO/IOMMU setup for host memory.\n");
     printf("See README.md for DMA test instructions.\n");
     return 0;
+}
+
+// Debug register dump (call with --debug flag)
+void dump_debug_regs(PCIe::BaseAddressRegister& bar) {
+    printf("\n=== Debug Register Dump (0x2000) ===\n");
+    
+    uint32_t status = bar.read32(0x2000);
+    printf("  Status:      0x%08x\n", status);
+    printf("    rx_seen:   %d\n", status & 1);
+    printf("    tx_seen:   %d\n", (status >> 1) & 1);
+    printf("    tx_state:  %d\n", (status >> 4) & 0xF);
+    printf("    rx_type:   0x%02x\n", (status >> 8) & 0xFF);
+    
+    printf("  RX count:    %u\n", bar.read32(0x2004));
+    printf("  TX count:    %u\n", bar.read32(0x2008));
+    
+    printf("\n  Last RX TLP header:\n");
+    printf("    DW0: 0x%08x\n", bar.read32(0x2010));
+    printf("    DW1: 0x%08x\n", bar.read32(0x2014));
+    printf("    DW2: 0x%08x\n", bar.read32(0x2018));
+    printf("    DW3: 0x%08x\n", bar.read32(0x201C));
+    printf("  Last RX data: 0x%08x_%08x\n", bar.read32(0x2024), bar.read32(0x2020));
+    
+    printf("\n  Last TX TLP header:\n");
+    printf("    DW0: 0x%08x\n", bar.read32(0x2028));
+    printf("    DW1: 0x%08x\n", bar.read32(0x202C));
+    printf("    DW2: 0x%08x\n", bar.read32(0x2030));
+    printf("    DW3: 0x%08x\n", bar.read32(0x2034));
+    printf("  Last TX data: 0x%08x_%08x\n", bar.read32(0x203C), bar.read32(0x2038));
+    
+    printf("\n  Cycle count: %u_%u\n", bar.read32(0x2044), bar.read32(0x2040));
+    printf("  RX ready cycles: %u\n", bar.read32(0x2048));
+    printf("  TX ready cycles: %u\n", bar.read32(0x204C));
 }

@@ -36,8 +36,8 @@ void tick() {
         }
     }
     
-    // Send completions
-    if (!pending_cpls.empty()) {
+    // Send completions only when bridge is ready to accept
+    if (!pending_cpls.empty() && dut->rx_st_ready) {
         auto& cpl = pending_cpls[0];
         dut->rx_st_hdr[3] = (0b010 << 29) | (0b01010 << 24) | 2;
         dut->rx_st_hdr[2] = (0x0100 << 16) | 8;
@@ -48,7 +48,8 @@ void tick() {
         dut->rx_st_sop = 1; dut->rx_st_eop = 1;
         dut->rx_st_hvalid = 1; dut->rx_st_dvalid = 1;
         pending_cpls.erase(pending_cpls.begin());
-    } else {
+    } else if (dut->rx_st_ready) {
+        // Only clear signals when ready (so we don't clear them while presenting a TLP)
         for (int i = 0; i < 4; i++) dut->rx_st_hdr[i] = 0;
         for (int i = 0; i < 8; i++) dut->rx_st_data[i] = 0;
         dut->rx_st_sop = 0; dut->rx_st_eop = 0;
@@ -57,6 +58,9 @@ void tick() {
 }
 
 void send_mwr(uint32_t addr, uint64_t data) {
+    // Wait for rx_st_ready before sending TLP
+    while (!dut->rx_st_ready) tick();
+    
     dut->rx_st_hdr[3] = (0b011 << 29) | (0b00000 << 24) | 2;
     dut->rx_st_hdr[2] = (0x0200 << 16) | 0xFF;
     dut->rx_st_hdr[1] = 0;
@@ -66,9 +70,15 @@ void send_mwr(uint32_t addr, uint64_t data) {
     dut->rx_st_sop = 1; dut->rx_st_eop = 1;
     dut->rx_st_hvalid = 1; dut->rx_st_dvalid = 1; dut->rx_st_bar = 0;
     tick();
+    // Clear valid signals after presenting TLP
+    dut->rx_st_sop = 0; dut->rx_st_eop = 0;
+    dut->rx_st_hvalid = 0; dut->rx_st_dvalid = 0;
 }
 
 void send_mrd(uint32_t addr, uint8_t tag) {
+    // Wait for rx_st_ready before sending TLP
+    while (!dut->rx_st_ready) tick();
+    
     dut->rx_st_hdr[3] = (0b001 << 29) | (0b00000 << 24) | 2;
     dut->rx_st_hdr[2] = (0x0200 << 16) | (tag << 8) | 0xFF;
     dut->rx_st_hdr[1] = 0;
@@ -76,20 +86,51 @@ void send_mrd(uint32_t addr, uint8_t tag) {
     dut->rx_st_sop = 1; dut->rx_st_eop = 1;
     dut->rx_st_hvalid = 1; dut->rx_st_dvalid = 0; dut->rx_st_bar = 0;
     tick();
+    // Clear valid signals after presenting TLP
+    dut->rx_st_sop = 0; dut->rx_st_eop = 0;
+    dut->rx_st_hvalid = 0; dut->rx_st_dvalid = 0;
 }
 
-bool wait_cpld(uint8_t exp_tag, uint64_t exp_data, int timeout = 30) {
+bool wait_cpld(uint8_t exp_tag, uint64_t exp_data, int timeout = 30, bool debug = false) {
     for (int i = 0; i < timeout; i++) {
         tick();
         if (dut->tx_st_hvalid && dut->tx_st_sop) {
             uint32_t dw0 = dut->tx_st_hdr[3];
-            if (((dw0 >> 29) & 0x7) == 0b010 && ((dw0 >> 24) & 0x1F) == 0b01010) {
+            uint8_t fmt = (dw0 >> 29) & 0x7;
+            uint8_t type = (dw0 >> 24) & 0x1F;
+            if (fmt == 0b010 && type == 0b01010) {
                 uint8_t tag = (dut->tx_st_hdr[1] >> 8) & 0xFF;
                 uint64_t data = ((uint64_t)dut->tx_st_data[1] << 32) | dut->tx_st_data[0];
+                if (debug) {
+                    printf("    CplD: tag=0x%02x (exp 0x%02x), data=0x%016lx (exp 0x%016lx)\n",
+                           tag, exp_tag, data, exp_data);
+                }
                 return (tag == exp_tag && data == exp_data);
             }
         }
     }
+    if (debug) printf("    Timeout waiting for CplD\n");
+    return false;
+}
+
+// Version that just checks we got a completion (any data)
+bool wait_cpld_any(uint8_t exp_tag, uint64_t *out_data = nullptr, int timeout = 30) {
+    for (int i = 0; i < timeout; i++) {
+        tick();
+        if (dut->tx_st_hvalid && dut->tx_st_sop) {
+            uint32_t dw0 = dut->tx_st_hdr[3];
+            uint8_t fmt = (dw0 >> 29) & 0x7;
+            uint8_t type = (dw0 >> 24) & 0x1F;
+            if (fmt == 0b010 && type == 0b01010) {
+                uint8_t tag = (dut->tx_st_hdr[1] >> 8) & 0xFF;
+                uint64_t data = ((uint64_t)dut->tx_st_data[1] << 32) | dut->tx_st_data[0];
+                printf("    CplD: tag=0x%02x (exp 0x%02x), data=0x%016lx\n", tag, exp_tag, data);
+                if (out_data) *out_data = data;
+                return (tag == exp_tag);
+            }
+        }
+    }
+    printf("    Timeout waiting for CplD (tag=0x%02x)\n", exp_tag);
     return false;
 }
 
@@ -141,20 +182,36 @@ int main(int argc, char** argv) {
     send_mwr(0x1000, 0xCAFEBABE12345678);
     for (int i = 0; i < 10; i++) tick();
     send_mrd(0x1000, 0x10);
-    if (wait_cpld(0x10, 0xCAFEBABE12345678)) { printf("  ✓ PASS\n"); pass++; }
-    else { printf("  ✗ FAIL\n"); fail++; }
+    if (wait_cpld(0x10, 0xCAFEBABE12345678)) { printf("  PASS\n"); pass++; }
+    else { printf("  FAIL\n"); fail++; }
 
     // Test 2: RAM multiple addresses
     printf("Test 2: RAM multiple addresses\n");
     send_mwr(0x1008, 0x1111222233334444);
     for (int i = 0; i < 10; i++) tick();
     send_mrd(0x1008, 0x20);
-    if (wait_cpld(0x20, 0x1111222233334444)) { printf("  ✓ PASS\n"); pass++; }
-    else { printf("  ✗ FAIL\n"); fail++; }
+    if (wait_cpld(0x20, 0x1111222233334444, 30, true)) { printf("  PASS\n"); pass++; }
+    else { printf("  FAIL\n"); fail++; }
 
-    // Test 3: DMA C2H (RAM → Host)
+    // Test 3: Debug registers (sniffer at 0x2xxx)
+    printf("Test 3: Debug register read (sniffer)\n");
+    send_mrd(0x2000, 0x25);  // Read status register
+    {
+        uint64_t dbg_data;
+        bool got_cpl = wait_cpld_any(0x25, &dbg_data, 50);  // Longer timeout
+        // Just verify we got a completion (not stuck)
+        if (got_cpl) { 
+            printf("  PASS (debug read completed, data=0x%016lx)\n", dbg_data); 
+            pass++; 
+        } else { 
+            printf("  FAIL (no completion for debug read)\n"); 
+            fail++; 
+        }
+    }
+
+    // Test 4: DMA C2H (RAM -> Host)
     // New register map: 0x10=host_addr(64-bit), 0x18=local_addr, 0x20=length
-    printf("Test 3: DMA C2H (RAM → Host)\n");
+    printf("Test 4: DMA C2H (RAM -> Host)\n");
     send_mwr(0x1100, 0xAAAABBBBCCCCDDDD);  // Put data in RAM at 0x1100
     for (int i = 0; i < 10; i++) tick();
     send_mwr(0x0010, 0x80000000);  // host_addr (full 64-bit, single write)
@@ -165,11 +222,11 @@ int main(int argc, char** argv) {
     for (int i = 0; i < 5; i++) tick();
     send_mwr(0x0000, 0x3);         // start C2H
     for (int i = 0; i < 100; i++) tick();
-    if (host_mem[0x80000000] == 0xAAAABBBBCCCCDDDD) { printf("  ✓ PASS\n"); pass++; }
-    else { printf("  ✗ FAIL (got 0x%lx)\n", host_mem[0x80000000]); fail++; }
+    if (host_mem[0x80000000] == 0xAAAABBBBCCCCDDDD) { printf("  [OK] PASS\n"); pass++; }
+    else { printf("  [X] FAIL (got 0x%lx)\n", host_mem[0x80000000]); fail++; }
 
-    // Test 4: DMA H2C (Host → RAM)  
-    printf("Test 4: DMA H2C (Host → RAM)\n");
+    // Test 5: DMA H2C (Host -> RAM)  
+    printf("Test 5: DMA H2C (Host -> RAM)\n");
     host_mem[0x90000000] = 0xDEADBEEF12345678;
     send_mwr(0x0010, 0x90000000);  // host_addr (full 64-bit, single write)
     for (int i = 0; i < 5; i++) tick();
@@ -180,12 +237,12 @@ int main(int argc, char** argv) {
     send_mwr(0x0000, 0x1);         // start H2C
     for (int i = 0; i < 100; i++) tick();
     send_mrd(0x1200, 0x30);        // Read from RAM at 0x1200
-    if (wait_cpld(0x30, 0xDEADBEEF12345678)) { printf("  ✓ PASS\n"); pass++; }
-    else { printf("  ✗ FAIL\n"); fail++; }
+    if (wait_cpld(0x30, 0xDEADBEEF12345678)) { printf("  [OK] PASS\n"); pass++; }
+    else { printf("  [X] FAIL\n"); fail++; }
 
-    // Test 5: MSI-X interrupt
+    // Test 6: MSI-X interrupt
     // When DMA completes with irq_en=1, should see MWr to MSI-X address (0xFEE00000)
-    printf("Test 5: DMA with MSI-X interrupt\n");
+    printf("Test 6: DMA with MSI-X interrupt\n");
     host_mem.erase(0xFEE00000);  // Clear any previous MSI-X
     host_mem[0xA0000000] = 0x1234567890ABCDEF;
     send_mwr(0x0010, 0xA0000000);  // host_addr
@@ -198,10 +255,10 @@ int main(int argc, char** argv) {
     for (int i = 0; i < 150; i++) tick();
     // Check if MSI-X was received (MWr to 0xFEE00000)
     if (host_mem.count(0xFEE00000)) { 
-        printf("  ✓ PASS (MSI-X data=0x%lx)\n", host_mem[0xFEE00000]); 
+        printf("  [OK] PASS (MSI-X data=0x%lx)\n", host_mem[0xFEE00000]); 
         pass++; 
     } else { 
-        printf("  ✗ FAIL (no MSI-X received)\n"); 
+        printf("  [X] FAIL (no MSI-X received)\n"); 
         fail++; 
     }
 
