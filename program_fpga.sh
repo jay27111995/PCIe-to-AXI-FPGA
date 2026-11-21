@@ -12,8 +12,8 @@ if [[ -z "$SOF_FILE" || ! -f "$SOF_FILE" ]]; then
     exit 1
 fi
 
-PCIE_EP=0000:b4:00.0
-PCIE_RP=0000:b3:00.0
+PCIE_EP=0000:b1:00.0
+PCIE_RP=0000:b0:02.0
 
 echo "=== Programming FPGA: $SOF_FILE ==="
 
