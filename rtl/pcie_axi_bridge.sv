@@ -17,10 +17,7 @@ module pcie_axi_bridge
     import rtile_pkg::*;
 #(
     parameter int AXI_ADDR_W = 32,
-    parameter int AXI_DATA_W = 64,
-    // Completer ID (BDF) - set to match actual PCIe slot assignment
-    // Default 0xb400 = bus 0xb4, device 0, function 0
-    parameter logic [15:0] COMPLETER_ID = 16'hb400
+    parameter int AXI_DATA_W = 64
 )(
     input  logic clk,
     input  logic rst_n,
@@ -158,6 +155,30 @@ module pcie_axi_bridge
 
     wire [7:0] cpl_rx_tag = rx_st_hdr[47:40];
     wire [7:0] wstrb_from_be = {rx_lbe, rx_fbe};
+
+    //=========================================================================
+    // Completer ID Auto-Capture
+    // Capture our BDF from the first incoming TLP after link_up.
+    // Host's Requester ID tells us our bus number (we're bus = host_bus + 1).
+    //=========================================================================
+    logic [15:0] completer_id;
+    logic        completer_id_valid;
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            completer_id <= 16'h0000;
+            completer_id_valid <= 0;
+        end else if (!link_up) begin
+            // Reset on link down so we re-capture after re-enumeration
+            completer_id_valid <= 0;
+        end else if (!completer_id_valid && rx_st_hvalid && rx_st_sop) begin
+            // First TLP after link_up - capture our BDF
+            // Host's bus is rx_rid[15:8], we're typically on the next bus
+            // Device and function are 0 for single-function endpoint
+            completer_id <= {rx_rid[15:8] + 8'd1, 8'h00};
+            completer_id_valid <= 1;
+        end
+    end
 
     //=========================================================================
     // Host Memory Read (AXI Master AR -> PCIe MRd -> CplD -> AXI Master R)
@@ -390,7 +411,7 @@ module pcie_axi_bridge
                         // DW0: Fmt=010 (3DW+data), Type=01010 (CplD), Length=2DW
                         {3'b010, 5'b01010, 8'b0, 6'b0, 10'd2},
                         // DW1: Completer ID, Status, Byte Count (8 bytes)
-                        {COMPLETER_ID, (bar_cpl_status == AXI_OKAY) ? 3'b000 : 3'b001, 1'b0, 12'd8},
+                        {completer_id, (bar_cpl_status == AXI_OKAY) ? 3'b000 : 3'b001, 1'b0, 12'd8},
                         // DW2: Requester ID, Tag, Lower Address
                         {bar_req_rid, bar_req_tag, 1'b0, bar_req_lower_addr},
                         // DW3: unused for 3DW header
@@ -414,7 +435,7 @@ module pcie_axi_bridge
                         // DW0: Fmt=001 (4DW no data), Type=00000 (MRd), Length=2DW
                         {3'b001, 5'b00000, 8'b0, 6'b0, 10'd2},
                         // DW1: Requester ID (us), Tag, First/Last BE
-                        {COMPLETER_ID, host_mrd_tag, 4'hF, 4'hF},
+                        {completer_id, host_mrd_tag, 4'hF, 4'hF},
                         // DW2: Address[63:32]
                         host_mrd_addr[63:32],
                         // DW3: Address[31:2], reserved
@@ -438,7 +459,7 @@ module pcie_axi_bridge
                         // DW0: Fmt=011 (4DW+data), Type=00000 (MWr), Length=2DW
                         {3'b011, 5'b00000, 8'b0, 6'b0, 10'd2},
                         // DW1: Requester ID (us), Tag=0, First/Last BE
-                        {COMPLETER_ID, 8'h00, 4'hF, 4'hF},
+                        {completer_id, 8'h00, 4'hF, 4'hF},
                         // DW2: Address[63:32]
                         host_mwr_addr[63:32],
                         // DW3: Address[31:2], reserved
@@ -462,7 +483,7 @@ module pcie_axi_bridge
                         // DW0: Fmt=011 (4DW+data), Type=00000 (MWr), Length=1DW
                         {3'b011, 5'b00000, 8'b0, 6'b0, 10'd1},
                         // DW1: Requester ID (us), Tag=0, First/Last BE
-                        {COMPLETER_ID, 8'h00, 4'hF, 4'hF},
+                        {completer_id, 8'h00, 4'hF, 4'hF},
                         // DW2: MSI-X address[63:32]
                         msix_addr[63:32],
                         // DW3: MSI-X address[31:2], reserved

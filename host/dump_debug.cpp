@@ -1,10 +1,322 @@
 #include "pcie-util.h"
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <unistd.h>
+
+//=============================================================================
+// PCIe Sniffer Register offsets (0x2xxx)
+//=============================================================================
+#define PCIE_STATUS      0x2000
+#define PCIE_CONTROL     0x2004
+#define PCIE_MODE        0x2008
+#define PCIE_TRIGGER     0x200C
+#define PCIE_WRITE_PTR   0x2010
+#define PCIE_ENTRY_COUNT 0x2014
+#define PCIE_RX_COUNT    0x2018
+#define PCIE_TX_COUNT    0x201C
+#define PCIE_CYCLE_LO    0x2020
+#define PCIE_CYCLE_HI    0x2024
+
+#define PCIE_READ_PTR    0x2030
+#define PCIE_TRACE_HDR0  0x2034
+#define PCIE_TRACE_HDR1  0x2038
+#define PCIE_TRACE_HDR2  0x203C
+#define PCIE_TRACE_HDR3  0x2040
+#define PCIE_TRACE_DATA0 0x2044
+#define PCIE_TRACE_DATA1 0x2048
+#define PCIE_TRACE_META  0x204C
+
+#define PCIE_LAST_RX_HDR0  0x2050
+#define PCIE_LAST_RX_HDR1  0x2054
+#define PCIE_LAST_RX_HDR2  0x2058
+#define PCIE_LAST_RX_HDR3  0x205C
+#define PCIE_LAST_RX_DATA0 0x2060
+#define PCIE_LAST_RX_DATA1 0x2064
+#define PCIE_LAST_TX_HDR0  0x2068
+#define PCIE_LAST_TX_HDR1  0x206C
+#define PCIE_LAST_TX_HDR2  0x2070
+#define PCIE_LAST_TX_HDR3  0x2074
+#define PCIE_LAST_TX_DATA0 0x2078
+#define PCIE_LAST_TX_DATA1 0x207C
+
+//=============================================================================
+// AXI Sniffer Register offsets (0x3xxx)
+//=============================================================================
+#define AXI_STATUS       0x3000
+#define AXI_CONTROL      0x3004
+#define AXI_WRITE_PTR    0x3008
+#define AXI_ENTRY_COUNT  0x300C
+#define AXI_AW_COUNT     0x3010
+#define AXI_AR_COUNT     0x3014
+
+#define AXI_READ_PTR     0x3020
+#define AXI_TRACE_ADDR   0x3024
+#define AXI_TRACE_DATA0  0x3028
+#define AXI_TRACE_DATA1  0x302C
+#define AXI_TRACE_META   0x3030
+
+// Control bits (same for both sniffers)
+#define CTRL_START  (1 << 0)
+#define CTRL_STOP   (1 << 1)
+#define CTRL_CLEAR  (1 << 2)
+
+const char* tx_state_name(int state) {
+    switch (state) {
+        case 0: return "IDLE";
+        case 1: return "BAR_WR_ADDR";
+        case 2: return "BAR_WR_RESP";
+        case 3: return "BAR_RD_ADDR";
+        case 4: return "BAR_RD_DATA";
+        case 5: return "BAR_CPL";
+        case 6: return "DMA_MRD";
+        case 7: return "DMA_MWR";
+        case 8: return "MSIX";
+        case 9: return "SEND";
+        default: return "???";
+    }
+}
+
+const char* tlp_type_name(int fmt, int type) {
+    if (type == 0x00) {
+        if (fmt == 0 || fmt == 1) return "MRd";
+        if (fmt == 2 || fmt == 3) return "MWr";
+    }
+    if (type == 0x0A) return "CplD";
+    if (type == 0x04) return "CfgRd";
+    if (type == 0x44) return "CfgWr";
+    return "???";
+}
+
+//=============================================================================
+// PCIe Sniffer Functions
+//=============================================================================
+void pcie_start(PCIe::BaseAddressRegister& bar, int mode) {
+    bar.write32(PCIE_CONTROL, CTRL_STOP);
+    bar.write32(PCIE_CONTROL, CTRL_CLEAR);
+    bar.write32(PCIE_MODE, mode);
+    bar.write32(PCIE_CONTROL, CTRL_START);
+}
+
+void pcie_stop(PCIe::BaseAddressRegister& bar) {
+    bar.write32(PCIE_CONTROL, CTRL_STOP);
+}
+
+void pcie_dump_status(PCIe::BaseAddressRegister& bar) {
+    uint32_t status = bar.read32(PCIE_STATUS);
+    
+    printf("=== PCIe Sniffer Status ===\n");
+    printf("  rx_seen:       %d\n", status & 1);
+    printf("  tx_seen:       %d\n", (status >> 1) & 1);
+    printf("  tx_state:      %d (%s)\n", (status >> 4) & 0xF, tx_state_name((status >> 4) & 0xF));
+    printf("  running:       %d\n", (status >> 16) & 1);
+    printf("  triggered:     %d\n", (status >> 17) & 1);
+    printf("  full:          %d\n", (status >> 18) & 1);
+    printf("  write_ptr:     %u\n", bar.read32(PCIE_WRITE_PTR));
+    printf("  entry_count:   %u\n", bar.read32(PCIE_ENTRY_COUNT));
+    printf("  rx_count:      %u\n", bar.read32(PCIE_RX_COUNT));
+    printf("  tx_count:      %u\n", bar.read32(PCIE_TX_COUNT));
+}
+
+void pcie_dump_trace(PCIe::BaseAddressRegister& bar, int count) {
+    uint32_t entry_count = bar.read32(PCIE_ENTRY_COUNT);
+    if (entry_count == 0) {
+        printf("\nPCIe trace buffer empty.\n");
+        return;
+    }
+    
+    int to_dump = (count > 0 && (uint32_t)count < entry_count) ? count : entry_count;
+    printf("\n=== PCIe TLP Trace (%u entries, showing %d) ===\n", entry_count, to_dump);
+    printf("  # | Dir | State | Type  | Header DW0-DW3\n");
+    printf("----+-----+-------+-------+------------------------------------------\n");
+    
+    for (int i = 0; i < to_dump; i++) {
+        bar.write32(PCIE_READ_PTR, i);
+        
+        uint32_t hdr0 = bar.read32(PCIE_TRACE_HDR0);
+        uint32_t hdr1 = bar.read32(PCIE_TRACE_HDR1);
+        uint32_t hdr2 = bar.read32(PCIE_TRACE_HDR2);
+        uint32_t hdr3 = bar.read32(PCIE_TRACE_HDR3);
+        uint32_t meta = bar.read32(PCIE_TRACE_META);
+        
+        int dir = meta & 1;
+        int state = (meta >> 1) & 0xF;
+        int fmt = (hdr2 >> 29) & 0x7;
+        int type = (hdr2 >> 24) & 0x1F;
+        
+        printf("%3d | %s  |   %d   | %-5s | %08x %08x %08x %08x\n",
+               i, dir ? "TX" : "RX", state, tlp_type_name(fmt, type),
+               hdr0, hdr1, hdr2, hdr3);
+    }
+}
+
+//=============================================================================
+// AXI Sniffer Functions
+//=============================================================================
+void axi_start(PCIe::BaseAddressRegister& bar) {
+    bar.write32(AXI_CONTROL, CTRL_STOP);
+    bar.write32(AXI_CONTROL, CTRL_CLEAR);
+    bar.write32(AXI_CONTROL, CTRL_START);
+}
+
+void axi_stop(PCIe::BaseAddressRegister& bar) {
+    bar.write32(AXI_CONTROL, CTRL_STOP);
+}
+
+void axi_dump_status(PCIe::BaseAddressRegister& bar) {
+    uint32_t status = bar.read32(AXI_STATUS);
+    
+    printf("\n=== AXI Sniffer Status ===\n");
+    printf("  running:       %d\n", status & 1);
+    printf("  full:          %d\n", (status >> 1) & 1);
+    printf("  aw_seen:       %d\n", (status >> 8) & 1);
+    printf("  w_seen:        %d\n", (status >> 9) & 1);
+    printf("  b_seen:        %d\n", (status >> 10) & 1);
+    printf("  ar_seen:       %d\n", (status >> 11) & 1);
+    printf("  r_seen:        %d\n", (status >> 12) & 1);
+    printf("  write_ptr:     %u\n", bar.read32(AXI_WRITE_PTR));
+    printf("  entry_count:   %u\n", bar.read32(AXI_ENTRY_COUNT));
+    printf("  aw_count:      %u\n", bar.read32(AXI_AW_COUNT));
+    printf("  ar_count:      %u\n", bar.read32(AXI_AR_COUNT));
+}
+
+void axi_dump_trace(PCIe::BaseAddressRegister& bar, int count) {
+    uint32_t entry_count = bar.read32(AXI_ENTRY_COUNT);
+    if (entry_count == 0) {
+        printf("\nAXI trace buffer empty.\n");
+        return;
+    }
+    
+    int to_dump = (count > 0 && (uint32_t)count < entry_count) ? count : entry_count;
+    printf("\n=== AXI Transaction Trace (%u entries, showing %d) ===\n", entry_count, to_dump);
+    printf("  # | Ch  | Phase | Addr/Resp | Data\n");
+    printf("----+-----+-------+-----------+------------------\n");
+    
+    for (int i = 0; i < to_dump; i++) {
+        bar.write32(AXI_READ_PTR, i);
+        
+        uint32_t addr = bar.read32(AXI_TRACE_ADDR);
+        uint32_t data0 = bar.read32(AXI_TRACE_DATA0);
+        uint32_t data1 = bar.read32(AXI_TRACE_DATA1);
+        uint32_t meta = bar.read32(AXI_TRACE_META);
+        
+        int strb_resp = meta & 0xFF;
+        int channel = (meta >> 8) & 1;
+        int phase = (meta >> 9) & 1;
+        
+        const char* ch_str = channel ? "RD" : "WR";
+        const char* ph_str = phase ? "Resp" : "Req ";
+        
+        if (phase == 0) {
+            // Request - show address
+            printf("%3d | %s | %s  | 0x%08x | %08x_%08x\n",
+                   i, ch_str, ph_str, addr, data1, data0);
+        } else {
+            // Response - show response code
+            printf("%3d | %s | %s  | resp=%d     | %08x_%08x\n",
+                   i, ch_str, ph_str, strb_resp & 0x3, data1, data0);
+        }
+    }
+}
+
+//=============================================================================
+// Combined Functions
+//=============================================================================
+void start_all(PCIe::BaseAddressRegister& bar) {
+    pcie_start(bar, 1);  // stop-on-full mode
+    axi_start(bar);
+    printf("Both sniffers started.\n");
+}
+
+void stop_all(PCIe::BaseAddressRegister& bar) {
+    pcie_stop(bar);
+    axi_stop(bar);
+    printf("Both sniffers stopped.\n");
+}
+
+void dump_all_status(PCIe::BaseAddressRegister& bar) {
+    pcie_dump_status(bar);
+    axi_dump_status(bar);
+}
+
+void dump_all_trace(PCIe::BaseAddressRegister& bar, int pcie_count, int axi_count) {
+    pcie_dump_trace(bar, pcie_count);
+    axi_dump_trace(bar, axi_count);
+}
+
+void self_test(PCIe::BaseAddressRegister& bar) {
+    printf("=== Self-Test: Capture BAR Activity ===\n\n");
+    
+    // 1. Start both sniffers
+    printf("1. Starting trace capture...\n");
+    start_all(bar);
+    
+    // 2. Write to DMA registers (0x0xxx)
+    printf("2. Writing to DMA registers...\n");
+    bar.write32(0x0010, 0x12345678);  // host_addr_lo
+    bar.write32(0x0014, 0x00000000);  // host_addr_hi
+    bar.write32(0x0018, 0x00001000);  // local_addr
+    bar.write32(0x0020, 0x00000008);  // length
+    
+    // 3. Write to RAM (0x1xxx)
+    printf("3. Writing to RAM...\n");
+    bar.write32(0x1000, 0xCAFEBABE);
+    bar.write32(0x1008, 0xDEADBEEF);
+    bar.write32(0x1010, 0x12345678);
+    bar.write32(0x1018, 0xABCDEF00);
+    
+    // 4. Read back from RAM
+    printf("4. Reading from RAM...\n");
+    uint32_t v1 = bar.read32(0x1000);
+    uint32_t v2 = bar.read32(0x1008);
+    uint32_t v3 = bar.read32(0x1010);
+    uint32_t v4 = bar.read32(0x1018);
+    printf("   Read back: 0x%08x 0x%08x 0x%08x 0x%08x\n", v1, v2, v3, v4);
+    
+    // 5. Read DMA status
+    printf("5. Reading DMA status...\n");
+    uint32_t dma_status = bar.read32(0x0008);
+    printf("   DMA status: 0x%08x\n", dma_status);
+    
+    // 6. Stop and dump
+    printf("6. Stopping capture...\n\n");
+    stop_all(bar);
+    
+    // 7. Show results
+    dump_all_status(bar);
+    dump_all_trace(bar, 20, 20);
+    
+    // 8. Verify RAM values
+    printf("\n=== Verification ===\n");
+    bool ok = (v1 == 0xCAFEBABE) && (v2 == 0xDEADBEEF) && 
+              (v3 == 0x12345678) && (v4 == 0xABCDEF00);
+    if (ok) {
+        printf("[OK] RAM read/write working!\n");
+    } else {
+        printf("[FAIL] RAM values don't match!\n");
+    }
+}
+
+void usage(const char* prog) {
+    printf("Usage: %s <pcie_device> [command]\n", prog);
+    printf("\nCommands:\n");
+    printf("  status          Show status of both sniffers (default)\n");
+    printf("  pcie [N]        Dump PCIe TLP trace (up to N entries)\n");
+    printf("  axi [N]         Dump AXI transaction trace (up to N entries)\n");
+    printf("  trace [N]       Dump both traces (up to N entries each)\n");
+    printf("  start           Start both sniffers\n");
+    printf("  stop            Stop both sniffers\n");
+    printf("  clear           Clear both trace buffers\n");
+    printf("  test            Self-test: capture BAR writes/reads, dump traces\n");
+    printf("\nExamples:\n");
+    printf("  %s 0000:b1:00.0              # Show status\n", prog);
+    printf("  %s 0000:b1:00.0 trace 10     # Dump both traces (10 entries)\n", prog);
+    printf("  %s 0000:b1:00.0 test         # Run self-test\n", prog);
+}
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
-        printf("Usage: %s <pcie_device>\n", argv[0]);
-        printf("Dumps debug registers from PCIe-AXI bridge\n");
+        usage(argv[0]);
         return 1;
     }
 
@@ -12,84 +324,42 @@ int main(int argc, char* argv[]) {
     auto& bar = *pf.BARs[0];
     bar.map();
 
-    printf("=== PCIe-AXI Bridge Debug Dump ===\n");
+    printf("=== PCIe-AXI Bridge Debug ===\n");
     printf("Device: %s\n\n", argv[1]);
 
-    // Status register
-    uint32_t status = bar.read32(0x2000);
-    printf("Status (0x2000):     0x%08x\n", status);
-    printf("  rx_seen:           %d\n", status & 1);
-    printf("  tx_seen:           %d\n", (status >> 1) & 1);
-    printf("  tx_state:          %d", (status >> 4) & 0xF);
-    switch ((status >> 4) & 0xF) {
-        case 0: printf(" (IDLE)\n"); break;
-        case 1: printf(" (BAR_WR_ADDR)\n"); break;
-        case 2: printf(" (BAR_WR_RESP)\n"); break;
-        case 3: printf(" (BAR_RD_ADDR)\n"); break;
-        case 4: printf(" (BAR_RD_DATA)\n"); break;
-        case 5: printf(" (BAR_CPL)\n"); break;
-        case 6: printf(" (DMA_MRD)\n"); break;
-        case 7: printf(" (DMA_MWR)\n"); break;
-        case 8: printf(" (MSIX)\n"); break;
-        case 9: printf(" (SEND)\n"); break;
-        default: printf(" (UNKNOWN)\n"); break;
-    }
-    uint8_t rx_type = (status >> 8) & 0xFF;
-    printf("  last_rx_type:      0x%02x (fmt=%d, type=%d)\n", 
-           rx_type, (rx_type >> 5) & 0x7, rx_type & 0x1F);
-
-    printf("\nCounters:\n");
-    printf("  RX TLP count:      %u\n", bar.read32(0x2004));
-    printf("  TX TLP count:      %u\n", bar.read32(0x2008));
-    printf("  RX ready cycles:   %u\n", bar.read32(0x2048));
-    printf("  TX ready cycles:   %u\n", bar.read32(0x204C));
-    printf("  Total cycles:      %u (lo)\n", bar.read32(0x2040));
-
-    printf("\nLast RX TLP (from host):\n");
-    uint32_t rx_dw3 = bar.read32(0x201C);
-    uint32_t rx_dw2 = bar.read32(0x2018);
-    uint32_t rx_dw1 = bar.read32(0x2014);
-    uint32_t rx_dw0 = bar.read32(0x2010);
-    printf("  Header: %08x %08x %08x %08x\n", rx_dw3, rx_dw2, rx_dw1, rx_dw0);
-    printf("    Fmt:     %d\n", (rx_dw3 >> 29) & 0x7);
-    printf("    Type:    0x%02x\n", (rx_dw3 >> 24) & 0x1F);
-    printf("    Length:  %d DW\n", rx_dw3 & 0x3FF);
-    printf("    ReqID:   0x%04x\n", (rx_dw2 >> 16) & 0xFFFF);
-    printf("    Tag:     0x%02x\n", (rx_dw2 >> 8) & 0xFF);
-    printf("    FBE:     0x%x\n", rx_dw2 & 0xF);
-    printf("    LBE:     0x%x\n", (rx_dw2 >> 4) & 0xF);
-    printf("    Addr:    0x%08x\n", rx_dw0);
-    printf("  Data:   0x%08x_%08x\n", bar.read32(0x2024), bar.read32(0x2020));
-
-    printf("\nLast TX TLP (to host):\n");
-    uint32_t tx_dw3 = bar.read32(0x2034);
-    uint32_t tx_dw2 = bar.read32(0x2030);
-    uint32_t tx_dw1 = bar.read32(0x202C);
-    uint32_t tx_dw0 = bar.read32(0x2028);
-    printf("  Header: %08x %08x %08x %08x\n", tx_dw3, tx_dw2, tx_dw1, tx_dw0);
-    printf("    Fmt:     %d\n", (tx_dw3 >> 29) & 0x7);
-    printf("    Type:    0x%02x\n", (tx_dw3 >> 24) & 0x1F);
-    printf("    Length:  %d DW\n", tx_dw3 & 0x3FF);
-    if (((tx_dw3 >> 24) & 0x1F) == 0x0A) {  // CplD
-        printf("    CplID:   0x%04x\n", (tx_dw2 >> 16) & 0xFFFF);
-        printf("    Status:  %d\n", (tx_dw2 >> 13) & 0x7);
-        printf("    ByteCnt: %d\n", tx_dw2 & 0xFFF);
-        printf("    ReqID:   0x%04x\n", (tx_dw1 >> 16) & 0xFFFF);
-        printf("    Tag:     0x%02x\n", (tx_dw1 >> 8) & 0xFF);
-        printf("    LowAddr: 0x%02x\n", tx_dw1 & 0x7F);
-    }
-    printf("  Data:   0x%08x_%08x\n", bar.read32(0x203C), bar.read32(0x2038));
-
-    // Quick sanity check
-    printf("\n=== Quick Check ===\n");
-    if (bar.read32(0x2004) == 0) {
-        printf("WARNING: No RX TLPs seen! Bridge may not be receiving from R-Tile.\n");
-    }
-    if ((status & 1) == 0) {
-        printf("WARNING: rx_seen=0 - Bridge hasn't processed any RX TLPs.\n");
-    }
-    if (((status >> 4) & 0xF) != 0) {
-        printf("WARNING: tx_state=%d - Bridge stuck in non-IDLE state!\n", (status >> 4) & 0xF);
+    const char* cmd = (argc > 2) ? argv[2] : "status";
+    int count = (argc > 3) ? atoi(argv[3]) : 20;
+    
+    if (strcmp(cmd, "status") == 0) {
+        dump_all_status(bar);
+        
+    } else if (strcmp(cmd, "pcie") == 0) {
+        pcie_dump_trace(bar, count);
+        
+    } else if (strcmp(cmd, "axi") == 0) {
+        axi_dump_trace(bar, count);
+        
+    } else if (strcmp(cmd, "trace") == 0) {
+        dump_all_trace(bar, count, count);
+        
+    } else if (strcmp(cmd, "start") == 0) {
+        start_all(bar);
+        
+    } else if (strcmp(cmd, "stop") == 0) {
+        stop_all(bar);
+        
+    } else if (strcmp(cmd, "clear") == 0) {
+        bar.write32(PCIE_CONTROL, CTRL_CLEAR);
+        bar.write32(AXI_CONTROL, CTRL_CLEAR);
+        printf("Both trace buffers cleared.\n");
+        
+    } else if (strcmp(cmd, "test") == 0) {
+        self_test(bar);
+        
+    } else {
+        printf("Unknown command: %s\n", cmd);
+        usage(argv[0]);
+        return 1;
     }
 
     return 0;

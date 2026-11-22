@@ -60,14 +60,21 @@ module top
     // Internal signals
     //=========================================================================
     
-    // Bridge → internal AXI bus (BAR access)
+    // Bridge -> internal AXI bus (BAR access)
+    // Note: s_axi_r* are INPUTS to bridge (read response from slaves)
+    //       s_axi_ar* outputs come from bridge (read request to slaves)
     logic [31:0] brg_awaddr, brg_araddr;
-    logic [63:0] brg_wdata, brg_rdata;
+    logic [63:0] brg_wdata;
     logic [7:0]  brg_wstrb;
-    logic [1:0]  brg_bresp, brg_rresp;
+    logic [1:0]  brg_bresp;
     logic brg_awvalid, brg_awready, brg_wvalid, brg_wready;
     logic brg_bvalid, brg_bready, brg_arvalid, brg_arready;
-    logic brg_rvalid, brg_rready;
+    
+    // Read response signals - muxed from DMA/RAM/Debug, fed INTO bridge
+    logic [63:0] brg_rdata_mux;
+    logic [1:0]  brg_rresp_mux;
+    logic        brg_rvalid_mux;
+    logic        brg_rready;  // Output from bridge
 
     // DMA → Bridge AXI master (host memory access)
     logic [63:0] dma_host_awaddr, dma_host_araddr;
@@ -122,7 +129,6 @@ module top
 
     // Debug signals
     logic [3:0]  dbg_tx_state;
-    logic [31:0] dbg_rdata;
 
     //=========================================================================
     // PCIe-AXI Bridge
@@ -145,7 +151,7 @@ module top
         .s_axi_wdata(brg_wdata), .s_axi_wstrb(brg_wstrb), .s_axi_wvalid(brg_wvalid), .s_axi_wready(brg_wready),
         .s_axi_bresp(brg_bresp), .s_axi_bvalid(brg_bvalid), .s_axi_bready(brg_bready),
         .s_axi_araddr(brg_araddr), .s_axi_arvalid(brg_arvalid), .s_axi_arready(brg_arready),
-        .s_axi_rdata(brg_rdata), .s_axi_rresp(brg_rresp), .s_axi_rvalid(brg_rvalid), .s_axi_rready(brg_rready),
+        .s_axi_rdata(brg_rdata_mux), .s_axi_rresp(brg_rresp_mux), .s_axi_rvalid(brg_rvalid_mux), .s_axi_rready(brg_rready),
         // AXI Master input (DMA → host memory)
         .m_axi_awaddr(dma_host_awaddr), .m_axi_awvalid(dma_host_awvalid), .m_axi_awready(dma_host_awready),
         .m_axi_wdata(dma_host_wdata), .m_axi_wstrb(dma_host_wstrb), .m_axi_wvalid(dma_host_wvalid), .m_axi_wready(dma_host_wready),
@@ -160,23 +166,64 @@ module top
     );
 
     //=========================================================================
-    // PCIe Sniffer (Debug)
+    // PCIe Sniffer (Debug) - 0x2xxx
     //=========================================================================
+    wire wr_to_pcie_dbg = brg_awaddr[13] && !brg_awaddr[12];  // 0x2xxx write
+    wire pcie_dbg_wen = brg_awvalid && brg_wvalid && wr_to_pcie_dbg;
+    logic [31:0] pcie_dbg_rdata;
+    
     pcie_sniffer u_sniffer (
         .clk, .rst_n,
         .rx_st_hdr, .rx_st_data, .rx_st_sop, .rx_st_hvalid, .rx_st_ready,
         .tx_st_hdr, .tx_st_data, .tx_st_sop, .tx_st_hvalid, .tx_st_ready,
         .tx_state(dbg_tx_state),
-        .dbg_addr(brg_araddr[7:0]),
-        .dbg_rdata(dbg_rdata)
+        .dbg_addr(brg_araddr[11:0]),
+        .dbg_wdata(brg_wdata[31:0]),
+        .dbg_wen(pcie_dbg_wen),
+        .dbg_rdata(pcie_dbg_rdata)
     );
 
     //=========================================================================
-    // Address Decode: 0x0xxx=DMA, 0x1xxx=RAM, 0x2xxx=Debug
+    // AXI Sniffer (Debug) - 0x3xxx
+    //=========================================================================
+    wire wr_to_axi_dbg = brg_awaddr[13] && brg_awaddr[12];  // 0x3xxx write
+    wire axi_dbg_wen = brg_awvalid && brg_wvalid && wr_to_axi_dbg;
+    logic [31:0] axi_dbg_rdata;
+    
+    axi_sniffer #(.DEPTH(64)) u_axi_sniffer (
+        .clk, .rst_n,
+        // Snoop bridge -> DMA/RAM AXI bus
+        .axi_awaddr(brg_awaddr),
+        .axi_awvalid(brg_awvalid),
+        .axi_awready(brg_awready),
+        .axi_wdata(brg_wdata),
+        .axi_wstrb(brg_wstrb),
+        .axi_wvalid(brg_wvalid),
+        .axi_wready(brg_wready),
+        .axi_bresp(brg_bresp),
+        .axi_bvalid(brg_bvalid),
+        .axi_bready(brg_bready),
+        .axi_araddr(brg_araddr),
+        .axi_arvalid(brg_arvalid),
+        .axi_arready(brg_arready),
+        .axi_rdata(brg_rdata_mux),
+        .axi_rresp(brg_rresp_mux),
+        .axi_rvalid(brg_rvalid_mux),
+        .axi_rready(brg_rready),
+        // Debug interface
+        .dbg_addr(brg_araddr[7:0]),
+        .dbg_wdata(brg_wdata[31:0]),
+        .dbg_wen(axi_dbg_wen),
+        .dbg_rdata(axi_dbg_rdata)
+    );
+
+    //=========================================================================
+    // Address Decode: 0x0xxx=DMA, 0x1xxx=RAM, 0x2xxx=PCIe Debug, 0x3xxx=AXI Debug
     //=========================================================================
     wire wr_to_ram = brg_awaddr[12] && !brg_awaddr[13];  // 0x1xxx
     wire rd_to_ram = brg_araddr[12] && !brg_araddr[13];  // 0x1xxx
-    wire rd_to_dbg = brg_araddr[13];                      // 0x2xxx
+    wire rd_to_pcie_dbg = brg_araddr[13] && !brg_araddr[12];  // 0x2xxx
+    wire rd_to_axi_dbg  = brg_araddr[13] && brg_araddr[12];   // 0x3xxx
 
     // Write path
     assign dma_s_awaddr  = brg_awaddr;
@@ -208,12 +255,15 @@ module top
     assign ram_bar_rready  = brg_rready;
 
     // Debug reads - hold rvalid until rready (proper AXI handshake)
-    // NOTE: brg_arready=1 combinationally for debug, so handshake completes same cycle.
-    // We must trigger on the handshake (arvalid && arready) not just arvalid.
+    // Supports both PCIe sniffer (0x2xxx) and AXI sniffer (0x3xxx)
+    wire rd_to_dbg = rd_to_pcie_dbg || rd_to_axi_dbg;
     logic        dbg_rvalid;
     logic [63:0] dbg_rdata_ext;
     logic [31:0] dbg_rdata_latched;
     wire         dbg_ar_handshake = brg_arvalid && brg_arready && rd_to_dbg;
+    
+    // Mux between PCIe sniffer and AXI sniffer data
+    wire [31:0] dbg_rdata = rd_to_axi_dbg ? axi_dbg_rdata : pcie_dbg_rdata;
     
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -232,10 +282,10 @@ module top
     end
     assign dbg_rdata_ext = {32'b0, dbg_rdata_latched};  // Zero-extend to 64 bits
 
-    assign brg_arready = rd_to_dbg ? 1'b1 : (rd_to_ram ? ram_bar_arready : dma_s_arready);
-    assign brg_rvalid  = dma_s_rvalid | ram_bar_rvalid | dbg_rvalid;
-    assign brg_rdata   = dma_s_rvalid ? dma_s_rdata : (ram_bar_rvalid ? ram_bar_rdata : dbg_rdata_ext);
-    assign brg_rresp   = dma_s_rvalid ? dma_s_rresp : (ram_bar_rvalid ? ram_bar_rresp : 2'b00);
+    assign brg_arready    = rd_to_dbg ? 1'b1 : (rd_to_ram ? ram_bar_arready : dma_s_arready);
+    assign brg_rvalid_mux = dma_s_rvalid | ram_bar_rvalid | dbg_rvalid;
+    assign brg_rdata_mux  = dma_s_rvalid ? dma_s_rdata : (ram_bar_rvalid ? ram_bar_rdata : dbg_rdata_ext);
+    assign brg_rresp_mux  = dma_s_rvalid ? dma_s_rresp : (ram_bar_rvalid ? ram_bar_rresp : 2'b00);
 
     //=========================================================================
     // DMA Engine
