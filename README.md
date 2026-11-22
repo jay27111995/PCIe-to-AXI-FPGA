@@ -173,3 +173,8 @@ host/
 ## License
 
 MIT
+
+## Disclaimer
+
+This project was developed with assistance from AI (Claude/Kiro). The code, architecture, and documentation were created through human-AI collaboration.
+
