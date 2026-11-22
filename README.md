@@ -89,19 +89,50 @@ cd tb && ./run_sniffer.sh   # Sniffer unit test - 6 tests
 ```
 
 ### Hardware Test
+
+PCIe addresses (fpga machine):
+```
+PCIE_EP=0000:b1:00.0   # Endpoint (FPGA)
+PCIE_RP=0000:b0:02.0   # Root port
+```
+
+**1. Remove endpoint and disable link:**
 ```bash
-# Program FPGA
-quartus_pgm -c 1 -m JTAG -o "p;*.sof"
+echo 1 | sudo tee /sys/bus/pci/devices/${PCIE_EP}/remove 2>/dev/null || true
+sudo setpci -s ${PCIE_RP} CAP_EXP+0x10.B=0x50
+```
 
-# Bind to VFIO
-PCI=0000:b1:00.0
-echo vfio-pci > /sys/bus/pci/devices/$PCI/driver_override
-echo $PCI > /sys/bus/pci/drivers/vfio-pci/bind
+**2. Program FPGA:**
+```bash
+quartus_pgm -c 1 -m JTAG -o "p;pcie-bridge-revid-0x09-*.sof"
+```
 
-# Run tests
+**3. Enable link and rescan:**
+```bash
+sudo setpci -s ${PCIE_RP} CAP_EXP+0x10.B=0x40
+sleep 2
+echo 1 | sudo tee /sys/bus/pci/rescan
+```
+
+**4. Verify and disable ACS:**
+```bash
+lspci -s ${PCIE_EP}
+sudo setpci -s ${PCIE_RP} ECAP_ACS+0x6.w=0x0
+```
+
+**5. Bind to VFIO:**
+```bash
+echo ${PCIE_EP} | sudo tee /sys/bus/pci/devices/${PCIE_EP}/driver/unbind 2>/dev/null || true
+sudo modprobe vfio-pci
+echo vfio-pci | sudo tee /sys/bus/pci/devices/${PCIE_EP}/driver_override
+echo ${PCIE_EP} | sudo tee /sys/bus/pci/drivers/vfio-pci/bind
+```
+
+**6. Run tests:**
+```bash
 cd host && ./build.sh
-sudo ./test_bridge $PCI      # Basic RAM/DMA test
-sudo ./dump_debug $PCI test  # Self-test with trace capture
+sudo ./test_bridge $PCIE_EP      # Basic RAM/DMA test
+sudo ./dump_debug $PCIE_EP test  # Self-test with trace capture
 ```
 
 ### Debug Commands

@@ -1,0 +1,7 @@
+==========================================
+PCIe-to-AXI Bridge FPGA Build
+Revision ID: 0x09
+Build dir: /home/eelljay/PCIe-to-AXI-FPGA/build
+==========================================
+Error: quartus_sh not found. Load Quartus environment first.
+  source /path/to/quartus/settings64.sh

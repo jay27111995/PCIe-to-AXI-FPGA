@@ -177,7 +177,7 @@ module top
         .rx_st_hdr, .rx_st_data, .rx_st_sop, .rx_st_hvalid, .rx_st_ready,
         .tx_st_hdr, .tx_st_data, .tx_st_sop, .tx_st_hvalid, .tx_st_ready,
         .tx_state(dbg_tx_state),
-        .dbg_addr(brg_araddr[11:0]),
+        .dbg_addr(dbg_addr_to_sniffer),
         .dbg_wdata(brg_wdata[31:0]),
         .dbg_wen(pcie_dbg_wen),
         .dbg_rdata(pcie_dbg_rdata)
@@ -211,7 +211,7 @@ module top
         .axi_rvalid(brg_rvalid_mux),
         .axi_rready(brg_rready),
         // Debug interface
-        .dbg_addr(brg_araddr[7:0]),
+        .dbg_addr(dbg_addr_to_sniffer[7:0]),
         .dbg_wdata(brg_wdata[31:0]),
         .dbg_wen(axi_dbg_wen),
         .dbg_rdata(axi_dbg_rdata)
@@ -254,28 +254,45 @@ module top
     assign ram_bar_arvalid = brg_arvalid && rd_to_ram;
     assign ram_bar_rready  = brg_rready;
 
-    // Debug reads - hold rvalid until rready (proper AXI handshake)
+    // Debug reads - 2-cycle pipeline for proper timing
     // Supports both PCIe sniffer (0x2xxx) and AXI sniffer (0x3xxx)
+    // 2026-11-22: Fixed - latched address drives combinational sniffer mux,
+    //             rvalid asserts one cycle after to allow combinational settle
     wire rd_to_dbg = rd_to_pcie_dbg || rd_to_axi_dbg;
     logic        dbg_rvalid;
     logic [63:0] dbg_rdata_ext;
     logic [31:0] dbg_rdata_latched;
+    logic [11:0] dbg_addr_latched;
+    logic        dbg_sel_axi_latched;  // 1=AXI sniffer, 0=PCIe sniffer
+    logic        dbg_rd_pending;       // AR handshake done, waiting for data
     wire         dbg_ar_handshake = brg_arvalid && brg_arready && rd_to_dbg;
     
+    // Latched address drives sniffers
+    wire [11:0] dbg_addr_to_sniffer = (dbg_rd_pending || dbg_rvalid) ? dbg_addr_latched : brg_araddr[11:0];
+    
     // Mux between PCIe sniffer and AXI sniffer data
-    wire [31:0] dbg_rdata = rd_to_axi_dbg ? axi_dbg_rdata : pcie_dbg_rdata;
+    wire [31:0] dbg_rdata = dbg_sel_axi_latched ? axi_dbg_rdata : pcie_dbg_rdata;
     
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             dbg_rvalid <= 0;
+            dbg_rd_pending <= 0;
             dbg_rdata_latched <= 0;
+            dbg_addr_latched <= 0;
+            dbg_sel_axi_latched <= 0;
         end else begin
-            if (dbg_ar_handshake && !dbg_rvalid) begin
-                // Address handshake completed for debug read - latch data and assert valid
-                dbg_rvalid <= 1;
+            if (dbg_ar_handshake && !dbg_rd_pending && !dbg_rvalid) begin
+                // Cycle 0: AR handshake - latch address and select
+                dbg_addr_latched <= brg_araddr[11:0];
+                dbg_sel_axi_latched <= rd_to_axi_dbg;
+                dbg_rd_pending <= 1;
+            end else if (dbg_rd_pending && !dbg_rvalid) begin
+                // Cycle 1: Address stable -> sample data, assert rvalid
                 dbg_rdata_latched <= dbg_rdata;
+                dbg_rvalid <= 1;
+                dbg_rd_pending <= 0;
             end else if (dbg_rvalid && brg_rready) begin
-                // Data handshake complete - deassert valid
+                // Cycle 2+: R handshake complete
                 dbg_rvalid <= 0;
             end
         end
