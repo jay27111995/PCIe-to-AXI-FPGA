@@ -85,10 +85,14 @@ void PCIe::BaseAddressRegister::map() {
   
   // Read current command register (offset 0x04)
   uint16_t cmd;
-  pread(mFunc.mDeviceFd, &cmd, 2, cfg_reg.offset + 0x04);
+  if (pread(mFunc.mDeviceFd, &cmd, 2, cfg_reg.offset + 0x04) != 2) {
+    perror("pread PCI command register");
+  }
   // Set bit 1 (Memory Space) and bit 2 (Bus Master)
   cmd |= 0x07;  // Enable I/O, Memory, and Bus Master
-  pwrite(mFunc.mDeviceFd, &cmd, 2, cfg_reg.offset + 0x04);
+  if (pwrite(mFunc.mDeviceFd, &cmd, 2, cfg_reg.offset + 0x04) != 2) {
+    perror("pwrite PCI command register");
+  }
   
   printf("PCI Command register set to 0x%04x\n", cmd);
 
