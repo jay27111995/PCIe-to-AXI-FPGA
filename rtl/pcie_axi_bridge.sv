@@ -277,6 +277,7 @@ module pcie_axi_bridge
         TX_BAR_RD_ADDR,
         TX_BAR_RD_DATA,
         TX_BAR_CPL,
+        TX_SEND_CPL,
         TX_HOST_MRD,
         TX_HOST_MWR,
         TX_MSIX,
@@ -292,13 +293,21 @@ module pcie_axi_bridge
     // BAR completion info (saved from RX)
     logic [15:0] bar_req_rid;
     logic [7:0]  bar_req_tag;
-    logic [6:0]  bar_req_lower_addr;
+    logic [6:0]  bar_req_lower_addr;  // Lower addr for current CplD
+    logic [9:0]  bar_req_len;         // Original requested length in DWs
+    logic [31:0] bar_req_addr;        // Current AXI read address
+    logic [11:0] bar_bytes_remaining; // Bytes still to complete (max 4KB = 4096)
+    logic [255:0] bar_cpl_buffer;     // Accumulate up to 8 DW (32 bytes) per CplD
+    logic [3:0]  bar_dw_count;        // DWs collected for current CplD (0-8)
+    logic [3:0]  bar_req_fbe;         // First byte enable (from MRd)
+    logic [3:0]  bar_req_lbe;         // Last byte enable (from MRd)
+    logic        bar_first_cpl;       // Is this the first CplD?
     logic [63:0] bar_cpl_data;
     logic [1:0]  bar_cpl_status;
 
     // TX header/data registers
     logic [127:0] tx_hdr_r;
-    logic [63:0]  tx_data_r;
+    logic [255:0] tx_data_r;  // Expanded for multi-DW CplD
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -317,6 +326,19 @@ module pcie_axi_bridge
             msix_ready <= 0;
             host_mrd_ready_pulse <= 0;
             host_mwr_ready_pulse <= 0;
+            // BAR request state
+            bar_req_rid <= 0;
+            bar_req_tag <= 0;
+            bar_req_lower_addr <= 0;
+            bar_req_len <= 0;
+            bar_req_addr <= 0;
+            bar_bytes_remaining <= 0;
+            bar_cpl_buffer <= 0;
+            bar_dw_count <= 0;
+            bar_cpl_status <= 0;
+            bar_req_fbe <= 0;
+            bar_req_lbe <= 0;
+            bar_first_cpl <= 0;
         end else begin
             tx_cpl_hdr_dec <= 0;
             tx_cpl_data_dec <= 0;
@@ -344,6 +366,18 @@ module pcie_axi_bridge
                         bar_req_rid <= rx_rid;
                         bar_req_tag <= rx_tag;
                         bar_req_lower_addr <= rx_addr[6:0];
+                        bar_req_len <= rx_len;
+                        bar_req_addr <= rx_addr[AXI_ADDR_W-1:0];
+                        bar_req_fbe <= rx_fbe;
+                        bar_req_lbe <= rx_lbe;
+                        bar_first_cpl <= 1;
+                        // Calculate total bytes: len * 4, adjusted by byte enables
+                        // For len=1: bytes = popcount(fbe)
+                        // For len>1: bytes = (len-2)*4 + popcount(fbe) + popcount(lbe)
+                        // Simplified: just use len*4 for now (full DWs)
+                        bar_bytes_remaining <= {rx_len, 2'b00};  // len * 4 bytes
+                        bar_dw_count <= 0;
+                        bar_cpl_buffer <= 256'b0;
                         s_axi_araddr <= rx_addr[AXI_ADDR_W-1:0];
                         s_axi_arvalid <= 1;
                         tx_state <= TX_BAR_RD_ADDR;
@@ -381,6 +415,7 @@ module pcie_axi_bridge
 
                 //-------------------------------------------------------------
                 // BAR Read: Host reads from FPGA via PCIe MRd -> CplD
+                // Supports up to 4KB by sending multiple 32-byte CplDs
                 //-------------------------------------------------------------
                 TX_BAR_RD_ADDR: begin
                     if (s_axi_arready) begin
@@ -393,13 +428,42 @@ module pcie_axi_bridge
                 TX_BAR_RD_DATA: begin
                     if (s_axi_rvalid) begin
                         s_axi_rready <= 0;
-                        bar_cpl_data <= s_axi_rdata;
                         bar_cpl_status <= s_axi_rresp;
-                        tx_state <= TX_BAR_CPL;
+                        
+                        // Store 64-bit (2 DW = 8 bytes) data into buffer
+                        case (bar_dw_count[2:1])  // Which 64-bit slot (0-3)
+                            2'd0: bar_cpl_buffer[63:0]   <= s_axi_rdata;
+                            2'd1: bar_cpl_buffer[127:64] <= s_axi_rdata;
+                            2'd2: bar_cpl_buffer[191:128] <= s_axi_rdata;
+                            2'd3: bar_cpl_buffer[255:192] <= s_axi_rdata;
+                        endcase
+                        
+                        bar_dw_count <= bar_dw_count + 4'd2;
+                        bar_req_addr <= bar_req_addr + 32'd8;
+                        
+                        // Buffer will be full after this (8 DW) or is this the last data?
+                        // dw_count before update: 0,2,4,6 -> after: 2,4,6,8
+                        // Send CplD when: buffer full (count will be 8) OR we've read all needed bytes
+                        if (bar_dw_count == 4'd6 || {bar_dw_count + 4'd2, 2'b00} >= bar_bytes_remaining) begin
+                            // Send this CplD
+                            tx_state <= TX_BAR_CPL;
+                        end else begin
+                            // Continue filling buffer
+                            s_axi_araddr <= bar_req_addr + 32'd8;
+                            s_axi_arvalid <= 1;
+                            tx_state <= TX_BAR_RD_ADDR;
+                        end
                     end
                 end
 
                 TX_BAR_CPL: begin
+                    // Calculate bytes in this CplD (dw_count is what we collected)
+                    // After last AXI read, bar_dw_count was updated
+                    logic [5:0] cpl_bytes_this;
+                    logic [3:0] cpl_dw_this;
+                    cpl_dw_this = bar_dw_count;  // DWs collected
+                    cpl_bytes_this = {cpl_dw_this, 2'b00};  // * 4
+                    
                     // Build CplD TLP header
                     tx_st_sop <= 1;
                     tx_st_eop <= 1;
@@ -407,18 +471,48 @@ module pcie_axi_bridge
                     tx_st_dvalid <= 1;
                     tx_cpl_hdr_dec <= 1;
                     tx_cpl_data_dec <= 1;
+                    
                     tx_hdr_r <= {
-                        // DW0: Fmt=010 (3DW+data), Type=01010 (CplD), Length=2DW
-                        {3'b010, 5'b01010, 8'b0, 6'b0, 10'd2},
-                        // DW1: Completer ID, Status, Byte Count (8 bytes)
-                        {completer_id, (bar_cpl_status == AXI_OKAY) ? 3'b000 : 3'b001, 1'b0, 12'd8},
-                        // DW2: Requester ID, Tag, Lower Address
+                        // DW0: Fmt=010 (3DW+data), Type=01010 (CplD), Length in DW
+                        {3'b010, 5'b01010, 8'b0, 6'b0, 6'b0, cpl_dw_this},
+                        // DW1: Completer ID, Status, BCM=0, ByteCount (remaining bytes)
+                        {completer_id, (bar_cpl_status == AXI_OKAY) ? 3'b000 : 3'b001, 1'b0, bar_bytes_remaining},
+                        // DW2: Requester ID, Tag, Lower Address (for this CplD)
                         {bar_req_rid, bar_req_tag, 1'b0, bar_req_lower_addr},
-                        // DW3: unused for 3DW header
                         32'b0
                     };
-                    tx_data_r <= bar_cpl_data;
-                    tx_state <= TX_SEND;
+                    tx_data_r <= bar_cpl_buffer;
+                    tx_state <= TX_SEND_CPL;
+                end
+
+                TX_SEND_CPL: begin
+                    // Wait for tx_st_ready, then update counters
+                    if (tx_st_ready) begin
+                        tx_st_hvalid <= 0;
+                        tx_st_dvalid <= 0;
+                        tx_st_sop <= 0;
+                        tx_st_eop <= 0;
+                        
+                        // Update byte count (sent bar_dw_count * 4 bytes)
+                        bar_bytes_remaining <= bar_bytes_remaining - {6'b0, bar_dw_count, 2'b00};
+                        // Update lower addr for next CplD
+                        bar_req_lower_addr <= bar_req_lower_addr + {bar_dw_count[2:0], 2'b00};
+                        bar_first_cpl <= 0;
+                        
+                        // More data to read?
+                        if (bar_bytes_remaining > {6'b0, bar_dw_count, 2'b00}) begin
+                            // Reset buffer for next CplD
+                            bar_dw_count <= 0;
+                            bar_cpl_buffer <= 256'b0;
+                            // Start next AXI read
+                            s_axi_araddr <= bar_req_addr;
+                            s_axi_arvalid <= 1;
+                            tx_state <= TX_BAR_RD_ADDR;
+                        end else begin
+                            // All done
+                            tx_state <= TX_IDLE;
+                        end
+                    end
                 end
 
                 //-------------------------------------------------------------
@@ -441,7 +535,7 @@ module pcie_axi_bridge
                         // DW3: Address[31:2], reserved
                         {host_mrd_addr[31:2], 2'b00}
                     };
-                    tx_data_r <= 64'b0;
+                    tx_data_r <= 256'b0;
                     tx_state <= TX_SEND;
                 end
 
@@ -465,7 +559,7 @@ module pcie_axi_bridge
                         // DW3: Address[31:2], reserved
                         {host_mwr_addr[31:2], 2'b00}
                     };
-                    tx_data_r <= host_mwr_data;
+                    tx_data_r <= {192'b0, host_mwr_data};
                     tx_state <= TX_SEND;
                 end
 
@@ -489,7 +583,7 @@ module pcie_axi_bridge
                         // DW3: MSI-X address[31:2], reserved
                         {msix_addr[31:2], 2'b00}
                     };
-                    tx_data_r <= {32'b0, msix_data};
+                    tx_data_r <= {224'b0, msix_data};
                     tx_state <= TX_SEND;
                 end
 
@@ -515,7 +609,7 @@ module pcie_axi_bridge
     // TX Output
     //=========================================================================
     assign tx_st_hdr = tx_hdr_r;
-    assign tx_st_data = {192'b0, tx_data_r};
+    assign tx_st_data = tx_data_r;
     
     // Only accept new RX TLPs when in IDLE state
     assign rx_st_ready = (tx_state == TX_IDLE);

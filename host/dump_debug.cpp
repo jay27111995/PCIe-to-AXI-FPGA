@@ -37,20 +37,41 @@ inline uint32_t dbg_read32(PCIe::BaseAddressRegister& bar, uint64_t offset) {
 #define PCIE_TRACE_HDR3  0x2040
 #define PCIE_TRACE_DATA0 0x2044
 #define PCIE_TRACE_DATA1 0x2048
-#define PCIE_TRACE_META  0x204C
+#define PCIE_TRACE_DATA2 0x204C
+#define PCIE_TRACE_DATA3 0x2050
+#define PCIE_TRACE_DATA4 0x2054
+#define PCIE_TRACE_DATA5 0x2058
+#define PCIE_TRACE_DATA6 0x205C
+#define PCIE_TRACE_DATA7 0x2060
+#define PCIE_TRACE_META  0x2064
 
-#define PCIE_LAST_RX_HDR0  0x2050
-#define PCIE_LAST_RX_HDR1  0x2054
-#define PCIE_LAST_RX_HDR2  0x2058
-#define PCIE_LAST_RX_HDR3  0x205C
-#define PCIE_LAST_RX_DATA0 0x2060
-#define PCIE_LAST_RX_DATA1 0x2064
-#define PCIE_LAST_TX_HDR0  0x2068
-#define PCIE_LAST_TX_HDR1  0x206C
-#define PCIE_LAST_TX_HDR2  0x2070
-#define PCIE_LAST_TX_HDR3  0x2074
-#define PCIE_LAST_TX_DATA0 0x2078
-#define PCIE_LAST_TX_DATA1 0x207C
+// Last-seen RX TLP (header + 256-bit data)
+#define PCIE_LAST_RX_HDR0  0x2070
+#define PCIE_LAST_RX_HDR1  0x2074
+#define PCIE_LAST_RX_HDR2  0x2078
+#define PCIE_LAST_RX_HDR3  0x207C
+#define PCIE_LAST_RX_DATA0 0x2080
+#define PCIE_LAST_RX_DATA1 0x2084
+#define PCIE_LAST_RX_DATA2 0x2088
+#define PCIE_LAST_RX_DATA3 0x208C
+#define PCIE_LAST_RX_DATA4 0x2090
+#define PCIE_LAST_RX_DATA5 0x2094
+#define PCIE_LAST_RX_DATA6 0x2098
+#define PCIE_LAST_RX_DATA7 0x209C
+
+// Last-seen TX TLP (header + 256-bit data)
+#define PCIE_LAST_TX_HDR0  0x20A0
+#define PCIE_LAST_TX_HDR1  0x20A4
+#define PCIE_LAST_TX_HDR2  0x20A8
+#define PCIE_LAST_TX_HDR3  0x20AC
+#define PCIE_LAST_TX_DATA0 0x20B0
+#define PCIE_LAST_TX_DATA1 0x20B4
+#define PCIE_LAST_TX_DATA2 0x20B8
+#define PCIE_LAST_TX_DATA3 0x20BC
+#define PCIE_LAST_TX_DATA4 0x20C0
+#define PCIE_LAST_TX_DATA5 0x20C4
+#define PCIE_LAST_TX_DATA6 0x20C8
+#define PCIE_LAST_TX_DATA7 0x20CC
 
 //=============================================================================
 // AXI Sniffer Register offsets (0x3xxx)
@@ -139,8 +160,8 @@ void pcie_dump_trace(PCIe::BaseAddressRegister& bar, int count) {
     
     int to_dump = (count > 0 && (uint32_t)count < entry_count) ? count : entry_count;
     printf("\n=== PCIe TLP Trace (%u entries, showing %d) ===\n", entry_count, to_dump);
-    printf("  # | Cycle      | Dir | State      | Type  | Header (DW0-DW3)\n");
-    printf("----+------------+-----+------------+-------+------------------------------------------\n");
+    printf("  # | Cycle      | Dir | State      | Type  | Len | Header (DW0-DW3)\n");
+    printf("----+------------+-----+------------+-------+-----+------------------------------------------\n");
     
     for (int i = 0; i < to_dump; i++) {
         // Set read pointer (use 64-bit write for bridge compatibility)
@@ -150,6 +171,15 @@ void pcie_dump_trace(PCIe::BaseAddressRegister& bar, int count) {
         uint32_t hdr1 = dbg_read32(bar, PCIE_TRACE_HDR1);
         uint32_t hdr2 = dbg_read32(bar, PCIE_TRACE_HDR2);
         uint32_t hdr3 = dbg_read32(bar, PCIE_TRACE_HDR3);
+        uint32_t data[8];
+        data[0] = dbg_read32(bar, PCIE_TRACE_DATA0);
+        data[1] = dbg_read32(bar, PCIE_TRACE_DATA1);
+        data[2] = dbg_read32(bar, PCIE_TRACE_DATA2);
+        data[3] = dbg_read32(bar, PCIE_TRACE_DATA3);
+        data[4] = dbg_read32(bar, PCIE_TRACE_DATA4);
+        data[5] = dbg_read32(bar, PCIE_TRACE_DATA5);
+        data[6] = dbg_read32(bar, PCIE_TRACE_DATA6);
+        data[7] = dbg_read32(bar, PCIE_TRACE_DATA7);
         uint32_t meta = dbg_read32(bar, PCIE_TRACE_META);
         
         // Parse meta: [31:5] timestamp, [4:1] tx_state, [0] direction
@@ -157,13 +187,26 @@ void pcie_dump_trace(PCIe::BaseAddressRegister& bar, int count) {
         int state = (meta >> 1) & 0xF;
         uint32_t timestamp = (meta >> 5) & 0x7FFFFFF;  // 27-bit timestamp
         
-        // Parse TLP type from header DW0: [31:29]=fmt, [28:24]=type
+        // Parse TLP from header DW0: [31:29]=fmt, [28:24]=type, [9:0]=length
         int fmt = (hdr0 >> 29) & 0x7;
         int type = (hdr0 >> 24) & 0x1F;
+        int len = hdr0 & 0x3FF;  // Length in DW
         
-        printf("%3d | %10u | %s  | %-10s | %-5s | %08x %08x %08x %08x\n",
+        printf("%3d | %10u | %s  | %-10s | %-5s | %3d | %08x %08x %08x %08x\n",
                i, timestamp, dir ? "TX" : "RX", tx_state_name(state), 
-               tlp_type_name(fmt, type), hdr0, hdr1, hdr2, hdr3);
+               tlp_type_name(fmt, type), len, hdr0, hdr1, hdr2, hdr3);
+        
+        // Print data if TLP has data (CplD, MWr)
+        bool has_data = (fmt & 0x2);  // bit 1 of fmt indicates data present
+        if (has_data && len > 0) {
+            int dw_to_show = (len > 8) ? 8 : len;
+            printf("    Data (%d DW): ", len);
+            for (int d = 0; d < dw_to_show; d++) {
+                printf("%08x ", data[d]);
+            }
+            if (len > 8) printf("...");
+            printf("\n");
+        }
     }
 }
 

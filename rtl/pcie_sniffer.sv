@@ -1,15 +1,16 @@
 //-----------------------------------------------------------------------------
 // pcie_sniffer.sv - PCIe TLP Trace Capture with Trigger
 //
-// 256-entry ring buffer for capturing TLP headers + data.
+// 256-entry ring buffer for capturing full TLP headers + data.
 // Supports trigger modes: continuous, stop-on-full, stop-on-trigger.
 //
-// Each trace entry (256 bits = 8 DWORDs):
-//   [127:0]   TLP header
-//   [191:128] TLP data (first 64 bits)
-//   [192]     Direction: 0=RX (from host), 1=TX (to host)
-//   [196:193] TX state at capture time
-//   [255:197] Timestamp (lower 59 bits of cycle counter)
+// Each trace entry (512 bits = 16 DWORDs):
+//   [127:0]   TLP header (128 bits)
+//   [383:128] TLP data (256 bits = 8 DW)
+//   [384]     Direction: 0=RX (from host), 1=TX (to host)
+//   [388:385] TX state at capture time
+//   [447:389] Timestamp (59 bits of cycle counter)
+//   [511:448] Reserved
 //
 // Register Map (BAR 0x2000-0x2FFF):
 //   0x000: status      - [0] rx_seen, [1] tx_seen, [7:4] tx_state, [8] running,
@@ -35,12 +36,18 @@
 //   0x040: trace_hdr3  - Selected entry header [127:96]
 //   0x044: trace_data0 - Selected entry data [31:0]
 //   0x048: trace_data1 - Selected entry data [63:32]
-//   0x04C: trace_meta  - [0] direction, [4:1] tx_state, [31:5] timestamp[26:0]
+//   0x04C: trace_data2 - Selected entry data [95:64]
+//   0x050: trace_data3 - Selected entry data [127:96]
+//   0x054: trace_data4 - Selected entry data [159:128]
+//   0x058: trace_data5 - Selected entry data [191:160]
+//   0x05C: trace_data6 - Selected entry data [223:192]
+//   0x060: trace_data7 - Selected entry data [255:224]
+//   0x064: trace_meta  - [0] direction, [4:1] tx_state, [31:5] timestamp[26:0]
 //
-//   0x050-0x05C: last_rx_hdr[0-3]  (most recent RX, always captured)
-//   0x060-0x064: last_rx_data[0-1]
-//   0x068-0x074: last_tx_hdr[0-3]  (most recent TX, always captured)
-//   0x078-0x07C: last_tx_data[0-1]
+//   0x070-0x07C: last_rx_hdr[0-3]  (most recent RX, always captured)
+//   0x080-0x09C: last_rx_data[0-7] (256 bits)
+//   0x0A0-0x0AC: last_tx_hdr[0-3]  (most recent TX, always captured)
+//   0x0B0-0x0CC: last_tx_data[0-7] (256 bits)
 //-----------------------------------------------------------------------------
 module pcie_sniffer (
     input  logic        clk,
@@ -71,9 +78,9 @@ module pcie_sniffer (
 );
 
     //=========================================================================
-    // Trace RAM - 256 entries x 256 bits
+    // Trace RAM - 256 entries x 512 bits (uses more BRAM but captures full TLP data)
     //=========================================================================
-    logic [255:0] trace_ram [0:255];
+    logic [511:0] trace_ram [0:255];
     logic [7:0]   write_ptr;
     logic [8:0]   entry_count;  // 0-256
     logic         running;
@@ -90,13 +97,13 @@ module pcie_sniffer (
 
     // Read interface
     logic [7:0]   read_ptr;
-    logic [255:0] read_entry;
+    logic [511:0] read_entry;
 
-    // Counters and last-seen
+    // Counters and last-seen (now with 256-bit data)
     logic [31:0]  rx_count, tx_count;
     logic [63:0]  cycle_count;
     logic [127:0] last_rx_hdr, last_tx_hdr;
-    logic [63:0]  last_rx_data, last_tx_data;
+    logic [255:0] last_rx_data, last_tx_data;
     logic         rx_seen, tx_seen;
     logic [7:0]   last_rx_type;
 
@@ -210,7 +217,7 @@ module pcie_sniffer (
             // Always capture last-seen TLPs (even when not running)
             if (rx_valid) begin
                 last_rx_hdr <= rx_st_hdr;
-                last_rx_data <= rx_st_data[63:0];
+                last_rx_data <= rx_st_data;  // Full 256-bit data
                 rx_count <= rx_count + 1;
                 rx_seen <= 1;
                 last_rx_type <= rx_tlp_type;
@@ -218,7 +225,7 @@ module pcie_sniffer (
             
             if (tx_valid) begin
                 last_tx_hdr <= tx_st_hdr;
-                last_tx_data <= tx_st_data[63:0];
+                last_tx_data <= tx_st_data;  // Full 256-bit data
                 tx_count <= tx_count + 1;
                 tx_seen <= 1;
             end
@@ -237,19 +244,20 @@ module pcie_sniffer (
                 should_capture = (capture_mode != 2'd3) || triggered;
                 
                 if (should_capture && (capture_rx || capture_tx)) begin
-                    // Build trace entry
-                    logic [255:0] entry;
+                    // Build 512-bit trace entry
+                    logic [511:0] entry;
                     if (capture_rx) begin
                         entry[127:0] = rx_st_hdr;
-                        entry[191:128] = rx_st_data[63:0];
-                        entry[192] = 1'b0;  // RX
+                        entry[383:128] = rx_st_data;  // Full 256-bit data
+                        entry[384] = 1'b0;  // RX
                     end else begin
                         entry[127:0] = tx_st_hdr;
-                        entry[191:128] = tx_st_data[63:0];
-                        entry[192] = 1'b1;  // TX
+                        entry[383:128] = tx_st_data;  // Full 256-bit data
+                        entry[384] = 1'b1;  // TX
                     end
-                    entry[196:193] = tx_state;
-                    entry[255:197] = cycle_count[58:0];
+                    entry[388:385] = tx_state;
+                    entry[447:389] = cycle_count[58:0];
+                    entry[511:448] = 64'b0;  // Reserved
                     
                     trace_ram[write_ptr] <= entry;
                     write_ptr <= write_ptr + 1;
@@ -274,6 +282,12 @@ module pcie_sniffer (
 
     //=========================================================================
     // Read Mux - registered output for clean timing
+    // New 512-bit entry format:
+    //   [127:0]   header
+    //   [383:128] data (256 bits)
+    //   [384]     direction
+    //   [388:385] tx_state
+    //   [447:389] timestamp
     //=========================================================================
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -293,7 +307,7 @@ module pcie_sniffer (
                 10'h008: dbg_rdata <= cycle_count[31:0];
                 10'h009: dbg_rdata <= cycle_count[63:32];
                 
-                // Trace read (0x030-0x04F)
+                // Trace entry read (0x030-0x064)
                 10'h00C: dbg_rdata <= {24'b0, read_ptr};
                 10'h00D: dbg_rdata <= read_entry[31:0];      // hdr0
                 10'h00E: dbg_rdata <= read_entry[63:32];     // hdr1
@@ -301,23 +315,43 @@ module pcie_sniffer (
                 10'h010: dbg_rdata <= read_entry[127:96];    // hdr3
                 10'h011: dbg_rdata <= read_entry[159:128];   // data0
                 10'h012: dbg_rdata <= read_entry[191:160];   // data1
-                10'h013: dbg_rdata <= {read_entry[223:197],  // timestamp[26:0]
-                                      read_entry[196:193],  // tx_state
-                                      read_entry[192]};     // direction
+                10'h013: dbg_rdata <= read_entry[223:192];   // data2
+                10'h014: dbg_rdata <= read_entry[255:224];   // data3
+                10'h015: dbg_rdata <= read_entry[287:256];   // data4
+                10'h016: dbg_rdata <= read_entry[319:288];   // data5
+                10'h017: dbg_rdata <= read_entry[351:320];   // data6
+                10'h018: dbg_rdata <= read_entry[383:352];   // data7
+                10'h019: dbg_rdata <= {read_entry[415:389],  // timestamp[26:0]
+                                      read_entry[388:385],  // tx_state
+                                      read_entry[384]};     // direction
                 
-                // Last-seen TLPs (0x050-0x07F)
-                10'h014: dbg_rdata <= last_rx_hdr[31:0];
-                10'h015: dbg_rdata <= last_rx_hdr[63:32];
-                10'h016: dbg_rdata <= last_rx_hdr[95:64];
-                10'h017: dbg_rdata <= last_rx_hdr[127:96];
-                10'h018: dbg_rdata <= last_rx_data[31:0];
-                10'h019: dbg_rdata <= last_rx_data[63:32];
-                10'h01A: dbg_rdata <= last_tx_hdr[31:0];
-                10'h01B: dbg_rdata <= last_tx_hdr[63:32];
-                10'h01C: dbg_rdata <= last_tx_hdr[95:64];
-                10'h01D: dbg_rdata <= last_tx_hdr[127:96];
-                10'h01E: dbg_rdata <= last_tx_data[31:0];
-                10'h01F: dbg_rdata <= last_tx_data[63:32];
+                // Last-seen RX TLP (0x070-0x09C) - header + 256-bit data
+                10'h01C: dbg_rdata <= last_rx_hdr[31:0];
+                10'h01D: dbg_rdata <= last_rx_hdr[63:32];
+                10'h01E: dbg_rdata <= last_rx_hdr[95:64];
+                10'h01F: dbg_rdata <= last_rx_hdr[127:96];
+                10'h020: dbg_rdata <= last_rx_data[31:0];
+                10'h021: dbg_rdata <= last_rx_data[63:32];
+                10'h022: dbg_rdata <= last_rx_data[95:64];
+                10'h023: dbg_rdata <= last_rx_data[127:96];
+                10'h024: dbg_rdata <= last_rx_data[159:128];
+                10'h025: dbg_rdata <= last_rx_data[191:160];
+                10'h026: dbg_rdata <= last_rx_data[223:192];
+                10'h027: dbg_rdata <= last_rx_data[255:224];
+                
+                // Last-seen TX TLP (0x0A0-0x0CC) - header + 256-bit data
+                10'h028: dbg_rdata <= last_tx_hdr[31:0];
+                10'h029: dbg_rdata <= last_tx_hdr[63:32];
+                10'h02A: dbg_rdata <= last_tx_hdr[95:64];
+                10'h02B: dbg_rdata <= last_tx_hdr[127:96];
+                10'h02C: dbg_rdata <= last_tx_data[31:0];
+                10'h02D: dbg_rdata <= last_tx_data[63:32];
+                10'h02E: dbg_rdata <= last_tx_data[95:64];
+                10'h02F: dbg_rdata <= last_tx_data[127:96];
+                10'h030: dbg_rdata <= last_tx_data[159:128];
+                10'h031: dbg_rdata <= last_tx_data[191:160];
+                10'h032: dbg_rdata <= last_tx_data[223:192];
+                10'h033: dbg_rdata <= last_tx_data[255:224];
                 
                 default: dbg_rdata <= {22'b0, dbg_addr[11:2]};  // Return word address for debug
             endcase

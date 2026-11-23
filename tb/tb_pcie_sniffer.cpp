@@ -55,9 +55,10 @@ void reset() {
 }
 
 // Read a debug register (word address * 4)
+// Note: dbg_rdata is registered, need tick to get result
 uint32_t read_dbg(uint16_t byte_addr) {
     dut->dbg_addr = byte_addr;
-    dut->eval();
+    tick();  // Clock in the address, output appears on dbg_rdata
     return dut->dbg_rdata;
 }
 
@@ -125,7 +126,7 @@ bool test_last_seen_capture() {
     // Check status register for rx_seen
     uint32_t status = read_dbg(0x00);
     if (!(status & 1)) {
-        printf("  [X] rx_seen not set\n");
+        printf("  [X] rx_seen not set (status=0x%08x)\n", status);
         return false;
     }
     
@@ -136,9 +137,9 @@ bool test_last_seen_capture() {
         return false;
     }
     
-    // Check last_rx_hdr (offset 0x050-0x05C)
-    uint32_t hdr0 = read_dbg(0x50);
-    uint32_t hdr1 = read_dbg(0x54);
+    // Check last_rx_hdr (now at offset 0x070-0x07C)
+    uint32_t hdr0 = read_dbg(0x70);
+    uint32_t hdr1 = read_dbg(0x74);
     
     if (hdr0 != dw2 || hdr1 != dw1) {
         printf("  [X] last_rx_hdr mismatch\n");
@@ -147,12 +148,14 @@ bool test_last_seen_capture() {
         return false;
     }
     
-    // Check last_rx_data (offset 0x060-0x064)
-    uint32_t captured_lo = read_dbg(0x60);
-    uint32_t captured_hi = read_dbg(0x64);
+    // Check last_rx_data (now at offset 0x080-0x09C for 256 bits)
+    uint32_t captured_lo = read_dbg(0x80);
+    uint32_t captured_hi = read_dbg(0x84);
     
     if (captured_lo != data_lo || captured_hi != data_hi) {
         printf("  [X] last_rx_data mismatch\n");
+        printf("      Expected: 0x%08x 0x%08x\n", data_lo, data_hi);
+        printf("      Got:      0x%08x 0x%08x\n", captured_lo, captured_hi);
         return false;
     }
     
@@ -204,7 +207,7 @@ bool test_trace_buffer_basic() {
     tick();
     
     uint32_t trace_hdr0 = read_dbg(0x34);
-    uint32_t trace_meta = read_dbg(0x4C);
+    uint32_t trace_meta = read_dbg(0x64);  // trace_meta now at 0x64
     uint8_t direction = trace_meta & 1;
     
     if (direction != 0) {
@@ -216,7 +219,7 @@ bool test_trace_buffer_basic() {
     write_dbg(0x30, 5);  // Set read_ptr to 5
     tick();
     
-    trace_meta = read_dbg(0x4C);
+    trace_meta = read_dbg(0x64);  // trace_meta now at 0x64
     direction = trace_meta & 1;
     
     if (direction != 1) {
@@ -361,10 +364,10 @@ bool test_tx_state_capture() {
     send_rx_tlp(0x1234, 0, 0, 0, 0, 0);
     tick();
     
-    // Read trace entry metadata
+    // Read trace entry metadata (now at 0x64 instead of 0x4C)
     write_dbg(0x30, 0);
     tick();
-    uint32_t trace_meta = read_dbg(0x4C);
+    uint32_t trace_meta = read_dbg(0x64);
     uint8_t captured_state = (trace_meta >> 1) & 0xF;
     
     if (captured_state != 7) {

@@ -75,11 +75,11 @@ void send_mwr(uint32_t addr, uint64_t data) {
     dut->rx_st_hvalid = 0; dut->rx_st_dvalid = 0;
 }
 
-void send_mrd(uint32_t addr, uint8_t tag) {
+void send_mrd(uint32_t addr, uint8_t tag, uint16_t len_dw = 2) {
     // Wait for rx_st_ready before sending TLP
     while (!dut->rx_st_ready) tick();
     
-    dut->rx_st_hdr[3] = (0b001 << 29) | (0b00000 << 24) | 2;
+    dut->rx_st_hdr[3] = (0b001 << 29) | (0b00000 << 24) | (len_dw & 0x3FF);
     dut->rx_st_hdr[2] = (0x0200 << 16) | (tag << 8) | 0xFF;
     dut->rx_st_hdr[1] = 0;
     dut->rx_st_hdr[0] = addr & ~3;
@@ -131,6 +131,31 @@ bool wait_cpld_any(uint8_t exp_tag, uint64_t *out_data = nullptr, int timeout = 
         }
     }
     printf("    Timeout waiting for CplD (tag=0x%02x)\n", exp_tag);
+    return false;
+}
+
+// Wait for multi-DW CplD and return all data
+bool wait_cpld_multi(uint8_t exp_tag, uint64_t *out_data, int num_qw, int timeout = 50) {
+    for (int i = 0; i < timeout; i++) {
+        tick();
+        if (dut->tx_st_hvalid && dut->tx_st_sop) {
+            uint32_t dw0 = dut->tx_st_hdr[3];
+            uint8_t fmt = (dw0 >> 29) & 0x7;
+            uint8_t type = (dw0 >> 24) & 0x1F;
+            uint16_t len = dw0 & 0x3FF;
+            if (fmt == 0b010 && type == 0b01010) {
+                uint8_t tag = (dut->tx_st_hdr[1] >> 8) & 0xFF;
+                printf("    CplD: tag=0x%02x (exp 0x%02x), len=%d DW\n", tag, exp_tag, len);
+                // Extract data from tx_st_data (256 bits = 8 DW = 4 QW)
+                for (int q = 0; q < num_qw && q < 4; q++) {
+                    out_data[q] = ((uint64_t)dut->tx_st_data[q*2+1] << 32) | dut->tx_st_data[q*2];
+                    printf("      QW%d: 0x%016lx\n", q, out_data[q]);
+                }
+                return (tag == exp_tag && len >= num_qw * 2);
+            }
+        }
+    }
+    printf("    Timeout waiting for multi-DW CplD (tag=0x%02x)\n", exp_tag);
     return false;
 }
 
@@ -247,9 +272,123 @@ int main(int argc, char** argv) {
     if (wait_cpld(0x30, 0xDEADBEEF12345678)) { printf("  [OK] PASS\n"); pass++; }
     else { printf("  [X] FAIL\n"); fail++; }
 
-    // Test 6: MSI-X interrupt
+    // Test 6: Multi-DW BAR read (4 DW = 16 bytes = 2 AXI beats)
+    printf("Test 6: Multi-DW BAR read (4 DW)\n");
+    // Write pattern to RAM at consecutive addresses
+    send_mwr(0x1400, 0xAAAABBBBCCCCDDDD);
+    for (int i = 0; i < 5; i++) tick();
+    send_mwr(0x1408, 0x1111222233334444);
+    for (int i = 0; i < 10; i++) tick();
+    // Request 4 DW read (16 bytes)
+    send_mrd(0x1400, 0x40, 4);  // addr, tag, len=4 DW
+    uint64_t multi_data[2];
+    if (wait_cpld_multi(0x40, multi_data, 2)) {
+        bool ok = (multi_data[0] == 0xAAAABBBBCCCCDDDD) && 
+                  (multi_data[1] == 0x1111222233334444);
+        if (ok) { printf("  [OK] PASS\n"); pass++; }
+        else { printf("  [X] FAIL (data mismatch)\n"); fail++; }
+    } else { 
+        printf("  [X] FAIL (no CplD)\n"); fail++; 
+    }
+
+    // Test 7: Multi-CplD test (64 bytes = 16 DW = 2 CplDs)
+    printf("Test 7: Multi-CplD BAR read (64 bytes)\n");
+    // Write 64 bytes of test pattern to RAM at 0x1500
+    send_mwr(0x1500, 0x0001000200030004);  // QW0
+    for (int i = 0; i < 5; i++) tick();
+    send_mwr(0x1508, 0x0005000600070008);  // QW1
+    for (int i = 0; i < 5; i++) tick();
+    send_mwr(0x1510, 0x0009000A000B000C);  // QW2
+    for (int i = 0; i < 5; i++) tick();
+    send_mwr(0x1518, 0x000D000E000F0010);  // QW3
+    for (int i = 0; i < 5; i++) tick();
+    send_mwr(0x1520, 0x0011001200130014);  // QW4
+    for (int i = 0; i < 5; i++) tick();
+    send_mwr(0x1528, 0x0015001600170018);  // QW5
+    for (int i = 0; i < 5; i++) tick();
+    send_mwr(0x1530, 0x0019001A001B001C);  // QW6
+    for (int i = 0; i < 5; i++) tick();
+    send_mwr(0x1538, 0x001D001E001F0020);  // QW7
+    for (int i = 0; i < 10; i++) tick();
+    
+    // Request 16 DW (64 bytes) - should get 2 CplDs of 8 DW each
+    send_mrd(0x1500, 0x50, 16);
+    uint64_t cpl1[4], cpl2[4];
+    bool got_cpl1 = wait_cpld_multi(0x50, cpl1, 4);
+    bool got_cpl2 = wait_cpld_multi(0x50, cpl2, 4);
+    if (got_cpl1 && got_cpl2) {
+        bool ok = (cpl1[0] == 0x0001000200030004) && (cpl1[3] == 0x000D000E000F0010) &&
+                  (cpl2[0] == 0x0011001200130014) && (cpl2[3] == 0x001D001E001F0020);
+        if (ok) { printf("  [OK] PASS (2 CplDs received)\n"); pass++; }
+        else { 
+            printf("  [X] FAIL (data mismatch)\n"); 
+            printf("    Expected cpl1[0]=0x0001000200030004, got 0x%016lx\n", cpl1[0]);
+            printf("    Expected cpl2[0]=0x0011001200130014, got 0x%016lx\n", cpl2[0]);
+            fail++; 
+        }
+    } else {
+        printf("  [X] FAIL (didn't receive 2 CplDs)\n"); fail++;
+    }
+
+    // Test 8: 256-byte read (64 DW = 8 CplDs)
+    printf("Test 8: Large multi-CplD BAR read (256 bytes)\n");
+    // Write pattern: address offset as data at each 8-byte location
+    for (int i = 0; i < 32; i++) {
+        send_mwr(0x1600 + i*8, 0x1600 + i*8);  // Store address as data
+        for (int j = 0; j < 3; j++) tick();
+    }
+    for (int i = 0; i < 10; i++) tick();
+    
+    // Request 64 DW (256 bytes) - should get 8 CplDs of 8 DW (32 bytes) each
+    send_mrd(0x1600, 0x60, 64);
+    int cpld_count = 0;
+    bool data_ok = true;
+    for (int cpl = 0; cpl < 8 && data_ok; cpl++) {
+        uint64_t data[4];
+        if (wait_cpld_multi(0x60, data, 4, 100)) {
+            cpld_count++;
+            // Check first QW of each CplD
+            uint64_t expected = 0x1600 + cpl * 32;  // Each CplD covers 32 bytes
+            if (data[0] != expected) {
+                printf("    CplD %d: expected first QW=0x%lx, got 0x%016lx\n", cpl, expected, data[0]);
+                data_ok = false;
+            }
+        } else {
+            printf("    Timeout waiting for CplD %d\n", cpl);
+            data_ok = false;
+        }
+    }
+    if (cpld_count == 8 && data_ok) {
+        printf("  [OK] PASS (%d CplDs received)\n", cpld_count);
+        pass++;
+    } else {
+        printf("  [X] FAIL (got %d CplDs, data_ok=%d)\n", cpld_count, data_ok);
+        fail++;
+    }
+
+    // Test 9: Odd-length read (10 DW = 40 bytes = 1 full CplD + 1 partial)
+    printf("Test 9: Odd-length BAR read (10 DW = 40 bytes)\n");
+    // Reuse data from 0x1600 area
+    send_mrd(0x1600, 0x70, 10);  // 10 DW = 40 bytes
+    uint64_t odd1[4], odd2[4];
+    bool got_odd1 = wait_cpld_multi(0x70, odd1, 4);  // First CplD: 8 DW
+    bool got_odd2 = wait_cpld_multi(0x70, odd2, 1);  // Second CplD: 2 DW
+    if (got_odd1 && got_odd2) {
+        // First CplD should have 8 DW, second should have 2 DW
+        bool ok = (odd1[0] == 0x1600) && (odd2[0] == 0x1620);
+        if (ok) { printf("  [OK] PASS (8 DW + 2 DW CplDs)\n"); pass++; }
+        else { 
+            printf("  [X] FAIL (data mismatch: odd1[0]=0x%lx, odd2[0]=0x%lx)\n", odd1[0], odd2[0]);
+            fail++;
+        }
+    } else {
+        printf("  [X] FAIL (didn't get 2 CplDs: got1=%d got2=%d)\n", got_odd1, got_odd2);
+        fail++;
+    }
+
+    // Test 10: MSI-X interrupt
     // When DMA completes with irq_en=1, should see MWr to MSI-X address (0xFEE00000)
-    printf("Test 6: DMA with MSI-X interrupt\n");
+    printf("Test 10: DMA with MSI-X interrupt\n");
     host_mem.erase(0xFEE00000);  // Clear any previous MSI-X
     host_mem[0xA0000000] = 0x1234567890ABCDEF;
     send_mwr(0x0010, 0xA0000000);  // host_addr
