@@ -273,51 +273,55 @@ module pcie_sniffer (
     assign read_entry = trace_ram[read_ptr];
 
     //=========================================================================
-    // Read Mux
+    // Read Mux - registered output for clean timing
     //=========================================================================
-    always_comb begin
-        case (dbg_addr[11:2])
-            // Status and control (0x000-0x02F)
-            10'h000: dbg_rdata = {11'b0, capture_mode, full, triggered, running,
-                                  last_rx_type, tx_state, 2'b0, tx_seen, rx_seen};
-            10'h001: dbg_rdata = 32'b0;  // Control (write-only)
-            10'h002: dbg_rdata = {26'b0, filter_mode, 2'b0, capture_mode};
-            10'h003: dbg_rdata = {22'b0, trigger_on_err, trigger_type_en, trigger_type};
-            10'h004: dbg_rdata = {24'b0, write_ptr};
-            10'h005: dbg_rdata = {23'b0, entry_count};
-            10'h006: dbg_rdata = rx_count;
-            10'h007: dbg_rdata = tx_count;
-            10'h008: dbg_rdata = cycle_count[31:0];
-            10'h009: dbg_rdata = cycle_count[63:32];
-            
-            // Trace read (0x030-0x04F)
-            10'h00C: dbg_rdata = {24'b0, read_ptr};
-            10'h00D: dbg_rdata = read_entry[31:0];      // hdr0
-            10'h00E: dbg_rdata = read_entry[63:32];     // hdr1
-            10'h00F: dbg_rdata = read_entry[95:64];     // hdr2
-            10'h010: dbg_rdata = read_entry[127:96];    // hdr3
-            10'h011: dbg_rdata = read_entry[159:128];   // data0
-            10'h012: dbg_rdata = read_entry[191:160];   // data1
-            10'h013: dbg_rdata = {read_entry[223:197],  // timestamp[26:0]
-                                  read_entry[196:193],  // tx_state
-                                  read_entry[192]};     // direction
-            
-            // Last-seen TLPs (0x050-0x07F)
-            10'h014: dbg_rdata = last_rx_hdr[31:0];
-            10'h015: dbg_rdata = last_rx_hdr[63:32];
-            10'h016: dbg_rdata = last_rx_hdr[95:64];
-            10'h017: dbg_rdata = last_rx_hdr[127:96];
-            10'h018: dbg_rdata = last_rx_data[31:0];
-            10'h019: dbg_rdata = last_rx_data[63:32];
-            10'h01A: dbg_rdata = last_tx_hdr[31:0];
-            10'h01B: dbg_rdata = last_tx_hdr[63:32];
-            10'h01C: dbg_rdata = last_tx_hdr[95:64];
-            10'h01D: dbg_rdata = last_tx_hdr[127:96];
-            10'h01E: dbg_rdata = last_tx_data[31:0];
-            10'h01F: dbg_rdata = last_tx_data[63:32];
-            
-            default: dbg_rdata = 32'hDEAD_BEEF;
-        endcase
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            dbg_rdata <= 32'h0;
+        end else begin
+            case (dbg_addr[11:2])
+                // Status and control (0x000-0x02F)
+                10'h000: dbg_rdata <= {11'b0, capture_mode, full, triggered, running,
+                                      last_rx_type, tx_state, 2'b0, tx_seen, rx_seen};
+                10'h001: dbg_rdata <= 32'b0;  // Control (write-only)
+                10'h002: dbg_rdata <= {26'b0, filter_mode, 2'b0, capture_mode};
+                10'h003: dbg_rdata <= {22'b0, trigger_on_err, trigger_type_en, trigger_type};
+                10'h004: dbg_rdata <= {24'b0, write_ptr};
+                10'h005: dbg_rdata <= {23'b0, entry_count};
+                10'h006: dbg_rdata <= rx_count;
+                10'h007: dbg_rdata <= tx_count;
+                10'h008: dbg_rdata <= cycle_count[31:0];
+                10'h009: dbg_rdata <= cycle_count[63:32];
+                
+                // Trace read (0x030-0x04F)
+                10'h00C: dbg_rdata <= {24'b0, read_ptr};
+                10'h00D: dbg_rdata <= read_entry[31:0];      // hdr0
+                10'h00E: dbg_rdata <= read_entry[63:32];     // hdr1
+                10'h00F: dbg_rdata <= read_entry[95:64];     // hdr2
+                10'h010: dbg_rdata <= read_entry[127:96];    // hdr3
+                10'h011: dbg_rdata <= read_entry[159:128];   // data0
+                10'h012: dbg_rdata <= read_entry[191:160];   // data1
+                10'h013: dbg_rdata <= {read_entry[223:197],  // timestamp[26:0]
+                                      read_entry[196:193],  // tx_state
+                                      read_entry[192]};     // direction
+                
+                // Last-seen TLPs (0x050-0x07F)
+                10'h014: dbg_rdata <= last_rx_hdr[31:0];
+                10'h015: dbg_rdata <= last_rx_hdr[63:32];
+                10'h016: dbg_rdata <= last_rx_hdr[95:64];
+                10'h017: dbg_rdata <= last_rx_hdr[127:96];
+                10'h018: dbg_rdata <= last_rx_data[31:0];
+                10'h019: dbg_rdata <= last_rx_data[63:32];
+                10'h01A: dbg_rdata <= last_tx_hdr[31:0];
+                10'h01B: dbg_rdata <= last_tx_hdr[63:32];
+                10'h01C: dbg_rdata <= last_tx_hdr[95:64];
+                10'h01D: dbg_rdata <= last_tx_hdr[127:96];
+                10'h01E: dbg_rdata <= last_tx_data[31:0];
+                10'h01F: dbg_rdata <= last_tx_data[63:32];
+                
+                default: dbg_rdata <= {22'b0, dbg_addr[11:2]};  // Return word address for debug
+            endcase
+        end
     end
 
 endmodule

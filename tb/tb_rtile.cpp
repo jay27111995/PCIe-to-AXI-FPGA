@@ -195,19 +195,26 @@ int main(int argc, char** argv) {
 
     // Test 3: Debug registers (sniffer at 0x2xxx)
     printf("Test 3: Debug register read (sniffer)\n");
-    send_mrd(0x2000, 0x25);  // Read status register
-    {
+    // Test multiple addresses to verify address decode
+    struct { uint32_t addr; const char* name; } dbg_tests[] = {
+        {0x2000, "status"},
+        {0x2010, "write_ptr"},
+        {0x2018, "rx_count"},
+    };
+    bool dbg_ok = true;
+    for (auto& t : dbg_tests) {
+        send_mrd(t.addr, 0x25);
         uint64_t dbg_data;
-        bool got_cpl = wait_cpld_any(0x25, &dbg_data, 50);  // Longer timeout
-        // Just verify we got a completion (not stuck)
-        if (got_cpl) { 
-            printf("  PASS (debug read completed, data=0x%016lx)\n", dbg_data); 
-            pass++; 
-        } else { 
-            printf("  FAIL (no completion for debug read)\n"); 
-            fail++; 
+        bool got_cpl = wait_cpld_any(0x25, &dbg_data, 50);
+        if (got_cpl) {
+            printf("    %s (0x%04x): 0x%016lx\n", t.name, t.addr, dbg_data);
+        } else {
+            printf("    %s (0x%04x): TIMEOUT\n", t.name, t.addr);
+            dbg_ok = false;
         }
     }
+    if (dbg_ok) { printf("  PASS (debug reads completed)\n"); pass++; }
+    else { printf("  FAIL (debug read timeout)\n"); fail++; }
 
     // Test 4: DMA C2H (RAM -> Host)
     // New register map: 0x10=host_addr(64-bit), 0x18=local_addr, 0x20=length

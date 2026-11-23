@@ -104,14 +104,14 @@ const char* tlp_type_name(int fmt, int type) {
 // PCIe Sniffer Functions
 //=============================================================================
 void pcie_start(PCIe::BaseAddressRegister& bar, int mode) {
-    bar.write32(PCIE_CONTROL, CTRL_STOP);
-    bar.write32(PCIE_CONTROL, CTRL_CLEAR);
-    bar.write32(PCIE_MODE, mode);
-    bar.write32(PCIE_CONTROL, CTRL_START);
+    bar.write64(PCIE_CONTROL, CTRL_STOP);
+    bar.write64(PCIE_CONTROL, CTRL_CLEAR);
+    bar.write64(PCIE_MODE, mode);
+    bar.write64(PCIE_CONTROL, CTRL_START);
 }
 
 void pcie_stop(PCIe::BaseAddressRegister& bar) {
-    bar.write32(PCIE_CONTROL, CTRL_STOP);
+    bar.write64(PCIE_CONTROL, CTRL_STOP);
 }
 
 void pcie_dump_status(PCIe::BaseAddressRegister& bar) {
@@ -139,11 +139,12 @@ void pcie_dump_trace(PCIe::BaseAddressRegister& bar, int count) {
     
     int to_dump = (count > 0 && (uint32_t)count < entry_count) ? count : entry_count;
     printf("\n=== PCIe TLP Trace (%u entries, showing %d) ===\n", entry_count, to_dump);
-    printf("  # | Dir | State | Type  | Header DW0-DW3\n");
-    printf("----+-----+-------+-------+------------------------------------------\n");
+    printf("  # | Cycle      | Dir | State      | Type  | Header (DW0-DW3)\n");
+    printf("----+------------+-----+------------+-------+------------------------------------------\n");
     
     for (int i = 0; i < to_dump; i++) {
-        bar.write32(PCIE_READ_PTR, i);
+        // Set read pointer (use 64-bit write for bridge compatibility)
+        bar.write64(PCIE_READ_PTR & ~7ULL, i);
         
         uint32_t hdr0 = dbg_read32(bar, PCIE_TRACE_HDR0);
         uint32_t hdr1 = dbg_read32(bar, PCIE_TRACE_HDR1);
@@ -151,14 +152,18 @@ void pcie_dump_trace(PCIe::BaseAddressRegister& bar, int count) {
         uint32_t hdr3 = dbg_read32(bar, PCIE_TRACE_HDR3);
         uint32_t meta = dbg_read32(bar, PCIE_TRACE_META);
         
+        // Parse meta: [31:5] timestamp, [4:1] tx_state, [0] direction
         int dir = meta & 1;
         int state = (meta >> 1) & 0xF;
-        int fmt = (hdr2 >> 29) & 0x7;
-        int type = (hdr2 >> 24) & 0x1F;
+        uint32_t timestamp = (meta >> 5) & 0x7FFFFFF;  // 27-bit timestamp
         
-        printf("%3d | %s  |   %d   | %-5s | %08x %08x %08x %08x\n",
-               i, dir ? "TX" : "RX", state, tlp_type_name(fmt, type),
-               hdr0, hdr1, hdr2, hdr3);
+        // Parse TLP type from header DW0: [31:29]=fmt, [28:24]=type
+        int fmt = (hdr0 >> 29) & 0x7;
+        int type = (hdr0 >> 24) & 0x1F;
+        
+        printf("%3d | %10u | %s  | %-10s | %-5s | %08x %08x %08x %08x\n",
+               i, timestamp, dir ? "TX" : "RX", tx_state_name(state), 
+               tlp_type_name(fmt, type), hdr0, hdr1, hdr2, hdr3);
     }
 }
 
@@ -166,13 +171,13 @@ void pcie_dump_trace(PCIe::BaseAddressRegister& bar, int count) {
 // AXI Sniffer Functions
 //=============================================================================
 void axi_start(PCIe::BaseAddressRegister& bar) {
-    bar.write32(AXI_CONTROL, CTRL_STOP);
-    bar.write32(AXI_CONTROL, CTRL_CLEAR);
-    bar.write32(AXI_CONTROL, CTRL_START);
+    bar.write64(AXI_CONTROL, CTRL_STOP);
+    bar.write64(AXI_CONTROL, CTRL_CLEAR);
+    bar.write64(AXI_CONTROL, CTRL_START);
 }
 
 void axi_stop(PCIe::BaseAddressRegister& bar) {
-    bar.write32(AXI_CONTROL, CTRL_STOP);
+    bar.write64(AXI_CONTROL, CTRL_STOP);
 }
 
 void axi_dump_status(PCIe::BaseAddressRegister& bar) {
@@ -201,32 +206,35 @@ void axi_dump_trace(PCIe::BaseAddressRegister& bar, int count) {
     
     int to_dump = (count > 0 && (uint32_t)count < entry_count) ? count : entry_count;
     printf("\n=== AXI Transaction Trace (%u entries, showing %d) ===\n", entry_count, to_dump);
-    printf("  # | Ch  | Phase | Addr/Resp | Data\n");
-    printf("----+-----+-------+-----------+------------------\n");
+    printf("  # | Cycle      | Ch  | Phase | Addr/Resp  | Data\n");
+    printf("----+------------+-----+-------+------------+------------------\n");
     
     for (int i = 0; i < to_dump; i++) {
-        bar.write32(AXI_READ_PTR, i);
+        // Set read pointer (use 64-bit write for bridge compatibility)
+        bar.write64(AXI_READ_PTR & ~7ULL, i);
         
         uint32_t addr = dbg_read32(bar, AXI_TRACE_ADDR);
         uint32_t data0 = dbg_read32(bar, AXI_TRACE_DATA0);
         uint32_t data1 = dbg_read32(bar, AXI_TRACE_DATA1);
         uint32_t meta = dbg_read32(bar, AXI_TRACE_META);
         
+        // Parse meta: [31:10] timestamp, [9] phase, [8] channel, [7:0] strb/resp
         int strb_resp = meta & 0xFF;
         int channel = (meta >> 8) & 1;
         int phase = (meta >> 9) & 1;
+        uint32_t timestamp = (meta >> 10) & 0x3FFFFF;  // 22-bit timestamp
         
         const char* ch_str = channel ? "RD" : "WR";
         const char* ph_str = phase ? "Resp" : "Req ";
         
         if (phase == 0) {
             // Request - show address
-            printf("%3d | %s | %s  | 0x%08x | %08x_%08x\n",
-                   i, ch_str, ph_str, addr, data1, data0);
+            printf("%3d | %10u | %s | %s  | 0x%08x | %08x_%08x\n",
+                   i, timestamp, ch_str, ph_str, addr, data1, data0);
         } else {
             // Response - show response code
-            printf("%3d | %s | %s  | resp=%d     | %08x_%08x\n",
-                   i, ch_str, ph_str, strb_resp & 0x3, data1, data0);
+            printf("%3d | %10u | %s | %s  | resp=%-5d | %08x_%08x\n",
+                   i, timestamp, ch_str, ph_str, strb_resp & 0x3, data1, data0);
         }
     }
 }
@@ -355,8 +363,8 @@ int main(int argc, char* argv[]) {
         stop_all(bar);
         
     } else if (strcmp(cmd, "clear") == 0) {
-        bar.write32(PCIE_CONTROL, CTRL_CLEAR);
-        bar.write32(AXI_CONTROL, CTRL_CLEAR);
+        bar.write64(PCIE_CONTROL, CTRL_CLEAR);
+        bar.write64(AXI_CONTROL, CTRL_CLEAR);
         printf("Both trace buffers cleared.\n");
         
     } else if (strcmp(cmd, "test") == 0) {

@@ -237,27 +237,31 @@ module axi_sniffer #(
     //=========================================================================
     // Read Mux
     //=========================================================================
-    always_comb begin
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            dbg_rdata <= 32'h0;
+        end else begin
         case (dbg_addr[7:2])
-            6'h00: dbg_rdata = {19'b0, r_seen, ar_seen, b_seen, w_seen, aw_seen,
+            6'h00: dbg_rdata <= {19'b0, r_seen, ar_seen, b_seen, w_seen, aw_seen,
                                 6'b0, full, running};
-            6'h01: dbg_rdata = 32'b0;  // Control (write-only)
-            6'h02: dbg_rdata = {{(32-PTR_W){1'b0}}, write_ptr};
-            6'h03: dbg_rdata = {{(32-PTR_W-1){1'b0}}, entry_count};
-            6'h04: dbg_rdata = aw_count;
-            6'h05: dbg_rdata = ar_count;
+            6'h01: dbg_rdata <= 32'b0;  // Control (write-only)
+            6'h02: dbg_rdata <= {{(32-PTR_W){1'b0}}, write_ptr};
+            6'h03: dbg_rdata <= {{(32-PTR_W-1){1'b0}}, entry_count};
+            6'h04: dbg_rdata <= aw_count;
+            6'h05: dbg_rdata <= ar_count;
             
-            6'h08: dbg_rdata = {{(32-PTR_W){1'b0}}, read_ptr};
-            6'h09: dbg_rdata = read_entry[31:0];    // addr
-            6'h0A: dbg_rdata = read_entry[63:32];   // data_lo
-            6'h0B: dbg_rdata = read_entry[95:64];   // data_hi
-            6'h0C: dbg_rdata = {read_entry[127:106], // timestamp
+            6'h08: dbg_rdata <= {{(32-PTR_W){1'b0}}, read_ptr};
+            6'h09: dbg_rdata <= read_entry[31:0];    // addr
+            6'h0A: dbg_rdata <= read_entry[63:32];   // data_lo
+            6'h0B: dbg_rdata <= read_entry[95:64];   // data_hi
+            6'h0C: dbg_rdata <= {read_entry[127:106], // timestamp
                                read_entry[105],      // phase
                                read_entry[104],      // channel
                                read_entry[103:96]};  // strobe/resp
             
-            default: dbg_rdata = 32'hDEAD_BEEF;
+            default: dbg_rdata <= 32'hDEAD_BEEF;
         endcase
+        end
     end
 
 endmodule

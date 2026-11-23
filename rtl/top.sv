@@ -257,20 +257,22 @@ module top
     assign ram_bar_arvalid = brg_arvalid && rd_to_ram;
     assign ram_bar_rready  = brg_rready;
 
-    // Debug reads - 2-cycle pipeline for proper timing
+    // Debug reads - 3-cycle pipeline for registered sniffer output
     // Supports both PCIe sniffer (0x2xxx) and AXI sniffer (0x3xxx)
-    // 2026-11-22: Fixed - latched address drives combinational sniffer mux,
-    //             rvalid asserts one cycle after to allow combinational settle
+    // 2026-11-24: Sniffer dbg_rdata now registered, need extra cycle
+    //   Cycle 0: AR handshake -> latch address
+    //   Cycle 1: Address to sniffer -> sniffer registers output
+    //   Cycle 2: Sample sniffer output, assert rvalid
     logic        dbg_rvalid;
     logic [63:0] dbg_rdata_ext;
     logic [31:0] dbg_rdata_latched;
     logic [11:0] dbg_addr_latched;
     logic        dbg_sel_axi_latched;  // 1=AXI sniffer, 0=PCIe sniffer
-    logic        dbg_rd_pending;       // AR handshake done, waiting for data
+    logic [1:0]  dbg_rd_state;         // 0=idle, 1=addr latched, 2=wait sniffer, 3=done
     wire         dbg_ar_handshake = brg_arvalid && brg_arready && rd_to_dbg;
     
     // Latched address drives sniffers
-    wire [11:0] dbg_addr_to_sniffer = (dbg_rd_pending || dbg_rvalid) ? dbg_addr_latched : brg_araddr[11:0];
+    wire [11:0] dbg_addr_to_sniffer = (dbg_rd_state != 0) ? dbg_addr_latched : brg_araddr[11:0];
     
     // Mux between PCIe sniffer and AXI sniffer data
     wire [31:0] dbg_rdata = dbg_sel_axi_latched ? axi_dbg_rdata : pcie_dbg_rdata;
@@ -278,30 +280,39 @@ module top
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             dbg_rvalid <= 0;
-            dbg_rd_pending <= 0;
+            dbg_rd_state <= 0;
             dbg_rdata_latched <= 0;
             dbg_addr_latched <= 0;
             dbg_sel_axi_latched <= 0;
         end else begin
-            if (dbg_ar_handshake && !dbg_rd_pending && !dbg_rvalid) begin
-                // Cycle 0: AR handshake - latch address and select
-                dbg_addr_latched <= brg_araddr[11:0];
-                dbg_sel_axi_latched <= rd_to_axi_dbg;
-                dbg_rd_pending <= 1;
-            end else if (dbg_rd_pending && !dbg_rvalid) begin
-                // Cycle 1: Address stable -> sample data, assert rvalid
-                dbg_rdata_latched <= dbg_rdata;
-                dbg_rvalid <= 1;
-                dbg_rd_pending <= 0;
-            end else if (dbg_rvalid && brg_rready) begin
-                // Cycle 2+: R handshake complete
-                dbg_rvalid <= 0;
-            end
+            case (dbg_rd_state)
+                2'd0: begin  // Idle - wait for AR handshake
+                    if (dbg_ar_handshake) begin
+                        dbg_addr_latched <= brg_araddr[11:0];
+                        dbg_sel_axi_latched <= rd_to_axi_dbg;
+                        dbg_rd_state <= 2'd1;
+                    end
+                end
+                2'd1: begin  // Cycle 1: Address sent to sniffer
+                    dbg_rd_state <= 2'd2;
+                end
+                2'd2: begin  // Cycle 2: Sniffer output valid, sample and assert rvalid
+                    dbg_rdata_latched <= dbg_rdata;
+                    dbg_rvalid <= 1;
+                    dbg_rd_state <= 2'd3;
+                end
+                2'd3: begin  // Wait for R handshake
+                    if (brg_rready) begin
+                        dbg_rvalid <= 0;
+                        dbg_rd_state <= 2'd0;
+                    end
+                end
+            endcase
         end
     end
     assign dbg_rdata_ext = {32'b0, dbg_rdata_latched};  // Zero-extend to 64 bits
 
-    assign brg_arready    = rd_to_dbg ? 1'b1 : (rd_to_ram ? ram_bar_arready : dma_s_arready);
+    assign brg_arready    = rd_to_dbg ? (dbg_rd_state == 0) : (rd_to_ram ? ram_bar_arready : dma_s_arready);
     assign brg_rvalid_mux = dma_s_rvalid | ram_bar_rvalid | dbg_rvalid;
     assign brg_rdata_mux  = dma_s_rvalid ? dma_s_rdata : (ram_bar_rvalid ? ram_bar_rdata : dbg_rdata_ext);
     assign brg_rresp_mux  = dma_s_rvalid ? dma_s_rresp : (ram_bar_rvalid ? ram_bar_rresp : 2'b00);
