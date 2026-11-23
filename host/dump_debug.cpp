@@ -5,6 +5,18 @@
 #include <unistd.h>
 
 //=============================================================================
+// Helper: Read 32-bit debug register using 64-bit access
+// The bridge only supports 64-bit transactions; 32-bit reads return 0xFFFFFFFF
+//=============================================================================
+inline uint32_t dbg_read32(PCIe::BaseAddressRegister& bar, uint64_t offset) {
+    // Align to 8-byte boundary and read 64 bits
+    uint64_t aligned = offset & ~7ULL;
+    uint64_t val64 = bar.read64(aligned);
+    // Return upper or lower 32 bits based on offset
+    return (offset & 4) ? (uint32_t)(val64 >> 32) : (uint32_t)val64;
+}
+
+//=============================================================================
 // PCIe Sniffer Register offsets (0x2xxx)
 //=============================================================================
 #define PCIE_STATUS      0x2000
@@ -103,7 +115,7 @@ void pcie_stop(PCIe::BaseAddressRegister& bar) {
 }
 
 void pcie_dump_status(PCIe::BaseAddressRegister& bar) {
-    uint32_t status = bar.read32(PCIE_STATUS);
+    uint32_t status = dbg_read32(bar, PCIE_STATUS);
     
     printf("=== PCIe Sniffer Status ===\n");
     printf("  rx_seen:       %d\n", status & 1);
@@ -112,14 +124,14 @@ void pcie_dump_status(PCIe::BaseAddressRegister& bar) {
     printf("  running:       %d\n", (status >> 16) & 1);
     printf("  triggered:     %d\n", (status >> 17) & 1);
     printf("  full:          %d\n", (status >> 18) & 1);
-    printf("  write_ptr:     %u\n", bar.read32(PCIE_WRITE_PTR));
-    printf("  entry_count:   %u\n", bar.read32(PCIE_ENTRY_COUNT));
-    printf("  rx_count:      %u\n", bar.read32(PCIE_RX_COUNT));
-    printf("  tx_count:      %u\n", bar.read32(PCIE_TX_COUNT));
+    printf("  write_ptr:     %u\n", dbg_read32(bar, PCIE_WRITE_PTR));
+    printf("  entry_count:   %u\n", dbg_read32(bar, PCIE_ENTRY_COUNT));
+    printf("  rx_count:      %u\n", dbg_read32(bar, PCIE_RX_COUNT));
+    printf("  tx_count:      %u\n", dbg_read32(bar, PCIE_TX_COUNT));
 }
 
 void pcie_dump_trace(PCIe::BaseAddressRegister& bar, int count) {
-    uint32_t entry_count = bar.read32(PCIE_ENTRY_COUNT);
+    uint32_t entry_count = dbg_read32(bar, PCIE_ENTRY_COUNT);
     if (entry_count == 0) {
         printf("\nPCIe trace buffer empty.\n");
         return;
@@ -133,11 +145,11 @@ void pcie_dump_trace(PCIe::BaseAddressRegister& bar, int count) {
     for (int i = 0; i < to_dump; i++) {
         bar.write32(PCIE_READ_PTR, i);
         
-        uint32_t hdr0 = bar.read32(PCIE_TRACE_HDR0);
-        uint32_t hdr1 = bar.read32(PCIE_TRACE_HDR1);
-        uint32_t hdr2 = bar.read32(PCIE_TRACE_HDR2);
-        uint32_t hdr3 = bar.read32(PCIE_TRACE_HDR3);
-        uint32_t meta = bar.read32(PCIE_TRACE_META);
+        uint32_t hdr0 = dbg_read32(bar, PCIE_TRACE_HDR0);
+        uint32_t hdr1 = dbg_read32(bar, PCIE_TRACE_HDR1);
+        uint32_t hdr2 = dbg_read32(bar, PCIE_TRACE_HDR2);
+        uint32_t hdr3 = dbg_read32(bar, PCIE_TRACE_HDR3);
+        uint32_t meta = dbg_read32(bar, PCIE_TRACE_META);
         
         int dir = meta & 1;
         int state = (meta >> 1) & 0xF;
@@ -164,7 +176,7 @@ void axi_stop(PCIe::BaseAddressRegister& bar) {
 }
 
 void axi_dump_status(PCIe::BaseAddressRegister& bar) {
-    uint32_t status = bar.read32(AXI_STATUS);
+    uint32_t status = dbg_read32(bar, AXI_STATUS);
     
     printf("\n=== AXI Sniffer Status ===\n");
     printf("  running:       %d\n", status & 1);
@@ -174,14 +186,14 @@ void axi_dump_status(PCIe::BaseAddressRegister& bar) {
     printf("  b_seen:        %d\n", (status >> 10) & 1);
     printf("  ar_seen:       %d\n", (status >> 11) & 1);
     printf("  r_seen:        %d\n", (status >> 12) & 1);
-    printf("  write_ptr:     %u\n", bar.read32(AXI_WRITE_PTR));
-    printf("  entry_count:   %u\n", bar.read32(AXI_ENTRY_COUNT));
-    printf("  aw_count:      %u\n", bar.read32(AXI_AW_COUNT));
-    printf("  ar_count:      %u\n", bar.read32(AXI_AR_COUNT));
+    printf("  write_ptr:     %u\n", dbg_read32(bar, AXI_WRITE_PTR));
+    printf("  entry_count:   %u\n", dbg_read32(bar, AXI_ENTRY_COUNT));
+    printf("  aw_count:      %u\n", dbg_read32(bar, AXI_AW_COUNT));
+    printf("  ar_count:      %u\n", dbg_read32(bar, AXI_AR_COUNT));
 }
 
 void axi_dump_trace(PCIe::BaseAddressRegister& bar, int count) {
-    uint32_t entry_count = bar.read32(AXI_ENTRY_COUNT);
+    uint32_t entry_count = dbg_read32(bar, AXI_ENTRY_COUNT);
     if (entry_count == 0) {
         printf("\nAXI trace buffer empty.\n");
         return;
@@ -195,10 +207,10 @@ void axi_dump_trace(PCIe::BaseAddressRegister& bar, int count) {
     for (int i = 0; i < to_dump; i++) {
         bar.write32(AXI_READ_PTR, i);
         
-        uint32_t addr = bar.read32(AXI_TRACE_ADDR);
-        uint32_t data0 = bar.read32(AXI_TRACE_DATA0);
-        uint32_t data1 = bar.read32(AXI_TRACE_DATA1);
-        uint32_t meta = bar.read32(AXI_TRACE_META);
+        uint32_t addr = dbg_read32(bar, AXI_TRACE_ADDR);
+        uint32_t data0 = dbg_read32(bar, AXI_TRACE_DATA0);
+        uint32_t data1 = dbg_read32(bar, AXI_TRACE_DATA1);
+        uint32_t meta = dbg_read32(bar, AXI_TRACE_META);
         
         int strb_resp = meta & 0xFF;
         int channel = (meta >> 8) & 1;
@@ -251,32 +263,27 @@ void self_test(PCIe::BaseAddressRegister& bar) {
     printf("1. Starting trace capture...\n");
     start_all(bar);
     
-    // 2. Write to DMA registers (0x0xxx)
+    // 2. Write to DMA registers (0x0xxx) - use 64-bit access
     printf("2. Writing to DMA registers...\n");
-    bar.write32(0x0010, 0x12345678);  // host_addr_lo
-    bar.write32(0x0014, 0x00000000);  // host_addr_hi
-    bar.write32(0x0018, 0x00001000);  // local_addr
-    bar.write32(0x0020, 0x00000008);  // length
+    bar.write64(0x0010, 0x0000000012345678ULL);  // host_addr
+    bar.write64(0x0018, 0x00001000);              // local_addr
+    bar.write64(0x0020, 0x00000008);              // length
     
-    // 3. Write to RAM (0x1xxx)
+    // 3. Write to RAM (0x1xxx) - use 64-bit access
     printf("3. Writing to RAM...\n");
-    bar.write32(0x1000, 0xCAFEBABE);
-    bar.write32(0x1008, 0xDEADBEEF);
-    bar.write32(0x1010, 0x12345678);
-    bar.write32(0x1018, 0xABCDEF00);
+    bar.write64(0x1000, 0xDEADBEEFCAFEBABEULL);
+    bar.write64(0x1008, 0xABCDEF0012345678ULL);
     
-    // 4. Read back from RAM
+    // 4. Read back from RAM - use 64-bit access
     printf("4. Reading from RAM...\n");
-    uint32_t v1 = bar.read32(0x1000);
-    uint32_t v2 = bar.read32(0x1008);
-    uint32_t v3 = bar.read32(0x1010);
-    uint32_t v4 = bar.read32(0x1018);
-    printf("   Read back: 0x%08x 0x%08x 0x%08x 0x%08x\n", v1, v2, v3, v4);
+    uint64_t v1 = bar.read64(0x1000);
+    uint64_t v2 = bar.read64(0x1008);
+    printf("   Read back: 0x%016lx 0x%016lx\n", v1, v2);
     
-    // 5. Read DMA status
+    // 5. Read DMA status - use 64-bit access
     printf("5. Reading DMA status...\n");
-    uint32_t dma_status = bar.read32(0x0008);
-    printf("   DMA status: 0x%08x\n", dma_status);
+    uint64_t dma_status = bar.read64(0x0008);
+    printf("   DMA status: 0x%016lx\n", dma_status);
     
     // 6. Stop and dump
     printf("6. Stopping capture...\n\n");
@@ -288,8 +295,7 @@ void self_test(PCIe::BaseAddressRegister& bar) {
     
     // 8. Verify RAM values
     printf("\n=== Verification ===\n");
-    bool ok = (v1 == 0xCAFEBABE) && (v2 == 0xDEADBEEF) && 
-              (v3 == 0x12345678) && (v4 == 0xABCDEF00);
+    bool ok = (v1 == 0xDEADBEEFCAFEBABEULL) && (v2 == 0xABCDEF0012345678ULL);
     if (ok) {
         printf("[OK] RAM read/write working!\n");
     } else {
