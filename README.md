@@ -1,6 +1,6 @@
 # PCIe-to-AXI FPGA Bridge
 
-Intel R-Tile PCIe Gen5 x16 to AXI-Lite bridge with DMA engine for Agilex 7 FPGA.
+Intel R-Tile PCIe Gen5 x16 to internal bus bridge with DMA engine for Agilex 7 FPGA.
 
 ## Architecture
 
