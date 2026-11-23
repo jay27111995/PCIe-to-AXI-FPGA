@@ -246,6 +246,9 @@ module top
     assign brg_bresp   = dma_s_bvalid ? dma_s_bresp : ram_bar_bresp;
 
     // Read path - with debug register support
+    // Define rd_to_dbg BEFORE using it (some synthesis tools are sensitive to ordering)
+    wire rd_to_dbg = rd_to_pcie_dbg || rd_to_axi_dbg;
+    
     assign dma_s_araddr  = brg_araddr;
     assign dma_s_arvalid = brg_arvalid && !rd_to_ram && !rd_to_dbg;
     assign dma_s_rready  = brg_rready;
@@ -258,7 +261,6 @@ module top
     // Supports both PCIe sniffer (0x2xxx) and AXI sniffer (0x3xxx)
     // 2026-11-22: Fixed - latched address drives combinational sniffer mux,
     //             rvalid asserts one cycle after to allow combinational settle
-    wire rd_to_dbg = rd_to_pcie_dbg || rd_to_axi_dbg;
     logic        dbg_rvalid;
     logic [63:0] dbg_rdata_ext;
     logic [31:0] dbg_rdata_latched;
