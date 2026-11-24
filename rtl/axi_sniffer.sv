@@ -1,34 +1,25 @@
 //-----------------------------------------------------------------------------
-// axi_sniffer.sv - AXI Bus Trace Capture
+// axi_sniffer.sv - Simple RAM-based AXI Bus Trace
 //
-// Captures AXI transactions for debugging. Used for both:
-//   - AXI Slave sniffer (BAR access from host)
-//   - AXI Master sniffer (DMA to host memory)
+// Direct 64-bit AXI interface - host reads RAM directly.
+// Used for both AXI Slave (BAR access) and AXI Master (DMA) sniffing.
 //
-// Uses global_timestamp input for event correlation across all sniffers.
-// 64-entry trace buffer (configurable via DEPTH parameter).
+// Memory Map (0x000-0x7FF within sniffer region):
+//   0x000: control/status  - write [0]=start, [1]=stop, [2]=clear
+//                          - read  [0]=running, [1]=full
+//   0x008: write_ptr       - [5:0] current entry (0-63)
+//   0x010: entry_count     - [6:0] entries captured
+//   0x018: aw_count        - AW transactions seen
+//   0x020: ar_count        - AR transactions seen
+//   0x028: timestamp       - current global timestamp
+//   0x030-0x03F: reserved
+//   0x040-0x7FF: trace entries (64 entries x 32 bytes each)
 //
-// Each trace entry (128 bits = 4 DWORDs):
-//   [31:0]    Address (AW or AR)
-//   [95:32]   Data (W or R, 64 bits)
-//   [103:96]  Strobe (W) or Response (R)
-//   [104]     Channel: 0=Write (AW/W/B), 1=Read (AR/R)
-//   [105]     Phase: 0=Request (AW/AR/W), 1=Response (B/R)
-//   [127:106] Timestamp (22 bits from global_timestamp)
-//
-// Register Map:
-//   0x00: status      - [0] running, [1] full, [8] aw_seen, [9] w_seen, 
-//                       [10] b_seen, [11] ar_seen, [12] r_seen
-//   0x04: control     - [0] start, [1] stop, [2] clear
-//   0x08: write_ptr   - Current write pointer (0-63)
-//   0x0C: entry_count - Number of entries captured (0-64)
-//   0x10: aw_count    - AW transactions seen
-//   0x14: ar_count    - AR transactions seen
-//   0x20: read_ptr    - Software sets this to select trace entry (0-63)
-//   0x24: trace_addr  - Selected entry address
-//   0x28: trace_data0 - Selected entry data [31:0]
-//   0x2C: trace_data1 - Selected entry data [63:32]
-//   0x30: trace_meta  - [7:0] strobe/resp, [8] channel, [9] phase, [31:10] timestamp
+// Trace entry format (256 bits = 4 QWs = 32 bytes):
+//   QW0 [63:0]:    {32'b0, addr[31:0]}
+//   QW1 [127:64]:  data[63:0]
+//   QW2 [191:128]: {reserved, timestamp[31:0]}
+//   QW3 [255:192]: {reserved, channel, phase, strb_resp[7:0]}
 //-----------------------------------------------------------------------------
 module axi_sniffer #(
     parameter DEPTH = 64
@@ -36,7 +27,7 @@ module axi_sniffer #(
     input  logic        clk,
     input  logic        rst_n,
 
-    // Global timestamp (shared across all sniffers)
+    // Global timestamp
     input  logic [31:0] global_timestamp,
 
     // Snoop AXI Write Channel
@@ -60,210 +51,198 @@ module axi_sniffer #(
     input  logic        axi_rvalid,
     input  logic        axi_rready,
 
-    // Debug interface
-    input  logic [7:0]  dbg_addr,
-    input  logic [31:0] dbg_wdata,
-    input  logic        dbg_wen,
-    output logic [31:0] dbg_rdata
+    // AXI-lite interface (directly from bridge)
+    input  logic [10:0] s_araddr,
+    input  logic        s_arvalid,
+    output logic        s_arready,
+    output logic [63:0] s_rdata,
+    output logic        s_rvalid,
+    input  logic        s_rready,
+
+    input  logic [10:0] s_awaddr,
+    input  logic [63:0] s_wdata,
+    input  logic        s_awvalid,
+    input  logic        s_wvalid,
+    output logic        s_awready,
+    output logic        s_wready,
+    output logic        s_bvalid,
+    input  logic        s_bready
 );
 
     localparam PTR_W = $clog2(DEPTH);
 
     //=========================================================================
-    // Trace RAM
+    // State registers
     //=========================================================================
-    logic [127:0] trace_ram [0:DEPTH-1];
+    logic running;
+    logic full;
     logic [PTR_W-1:0] write_ptr;
-    logic [PTR_W:0]   entry_count;  // 0 to DEPTH
-    logic             running;
-    logic             full;
-
-    // Read interface
-    logic [PTR_W-1:0] read_ptr;
-    logic [127:0]     read_entry;
-
-    // Counters
+    logic [PTR_W:0] entry_count;
     logic [31:0] aw_count, ar_count;
-    
-    // Seen flags
-    logic aw_seen, w_seen, b_seen, ar_seen, r_seen;
 
-    // Pending write address (to pair with W channel)
+    // Pending AW address
     logic [31:0] pending_awaddr;
-    logic        pending_awvalid;
+    logic pending_awvalid;
+
+    //=========================================================================
+    // Trace RAM: 64 entries x 4 QWs = 256 x 64-bit words
+    //=========================================================================
+    logic [63:0] trace_ram [0:DEPTH*4-1];
 
     //=========================================================================
     // AXI Transaction Detection
     //=========================================================================
     wire aw_handshake = axi_awvalid && axi_awready;
     wire w_handshake  = axi_wvalid  && axi_wready;
-    wire b_handshake  = axi_bvalid  && axi_bready;
     wire ar_handshake = axi_arvalid && axi_arready;
     wire r_handshake  = axi_rvalid  && axi_rready;
 
-    //=========================================================================
-    // Control Logic
-    //=========================================================================
-    wire ctrl_start = dbg_wen && (dbg_addr[7:2] == 6'h01) && dbg_wdata[0];
-    wire ctrl_stop  = dbg_wen && (dbg_addr[7:2] == 6'h01) && dbg_wdata[1];
-    wire ctrl_clear = dbg_wen && (dbg_addr[7:2] == 6'h01) && dbg_wdata[2];
+    wire capture_ok = running && !full;
 
+    //=========================================================================
+    // Capture logic
+    //=========================================================================
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            write_ptr <= 0;
-            entry_count <= 0;
             running <= 0;
             full <= 0;
-            read_ptr <= 0;
+            write_ptr <= 0;
+            entry_count <= 0;
             aw_count <= 0;
             ar_count <= 0;
-            aw_seen <= 0;
-            w_seen <= 0;
-            b_seen <= 0;
-            ar_seen <= 0;
-            r_seen <= 0;
             pending_awaddr <= 0;
             pending_awvalid <= 0;
         end else begin
-
-            // Control
-            if (ctrl_clear) begin
-                write_ptr <= 0;
-                entry_count <= 0;
-                full <= 0;
-                aw_count <= 0;
-                ar_count <= 0;
-                aw_seen <= 0;
-                w_seen <= 0;
-                b_seen <= 0;
-                ar_seen <= 0;
-                r_seen <= 0;
-            end
-            
-            if (ctrl_start) running <= 1;
-            if (ctrl_stop)  running <= 0;
-            
-            // Read pointer write
-            if (dbg_wen && dbg_addr[7:2] == 6'h08) begin
-                read_ptr <= dbg_wdata[PTR_W-1:0];
-            end
-
             // Track AW for pairing with W
             if (aw_handshake) begin
                 pending_awaddr <= axi_awaddr;
                 pending_awvalid <= 1;
                 aw_count <= aw_count + 1;
-                aw_seen <= 1;
             end
 
-            // Capture W (write data) - pair with pending AW
-            if (running && !full && w_handshake && pending_awvalid) begin
-                logic [127:0] entry;
-                entry[31:0]    = pending_awaddr;
-                entry[95:32]   = axi_wdata;
-                entry[103:96]  = axi_wstrb;
-                entry[104]     = 1'b0;  // Write channel
-                entry[105]     = 1'b0;  // Request phase
-                entry[127:106] = global_timestamp[21:0];
-                
-                trace_ram[write_ptr] <= entry;
-                write_ptr <= write_ptr + 1;
-                if (entry_count < DEPTH) entry_count <= entry_count + 1;
-                if (write_ptr == DEPTH-1) full <= 1;
-                
+            // Capture write data (paired with pending AW)
+            if (w_handshake && pending_awvalid && capture_ok) begin
+                trace_ram[{write_ptr, 2'd0}] <= {32'b0, pending_awaddr};
+                trace_ram[{write_ptr, 2'd1}] <= axi_wdata;
+                trace_ram[{write_ptr, 2'd2}] <= {32'b0, global_timestamp};
+                trace_ram[{write_ptr, 2'd3}] <= {54'b0, 1'b0, 1'b0, axi_wstrb};  // channel=0 (write), phase=0 (req)
                 pending_awvalid <= 0;
-                w_seen <= 1;
-            end
-
-            // Capture B (write response)
-            if (running && !full && b_handshake) begin
-                logic [127:0] entry;
-                entry[31:0]    = 32'h0;  // No address for B
-                entry[95:32]   = 64'h0;
-                entry[103:96]  = {6'b0, axi_bresp};
-                entry[104]     = 1'b0;  // Write channel
-                entry[105]     = 1'b1;  // Response phase
-                entry[127:106] = global_timestamp[21:0];
-                
-                trace_ram[write_ptr] <= entry;
                 write_ptr <= write_ptr + 1;
                 if (entry_count < DEPTH) entry_count <= entry_count + 1;
-                if (write_ptr == DEPTH-1) full <= 1;
-                
-                b_seen <= 1;
+                if (write_ptr == PTR_W'(DEPTH - 1)) full <= 1;
+            end else if (w_handshake) begin
+                pending_awvalid <= 0;
             end
 
-            // Capture AR (read address)
+            // Capture read request
             if (ar_handshake) begin
                 ar_count <= ar_count + 1;
-                ar_seen <= 1;
-                
-                if (running && !full) begin
-                    logic [127:0] entry;
-                    entry[31:0]    = axi_araddr;
-                    entry[95:32]   = 64'h0;
-                    entry[103:96]  = 8'h0;
-                    entry[104]     = 1'b1;  // Read channel
-                    entry[105]     = 1'b0;  // Request phase
-                    entry[127:106] = global_timestamp[21:0];
-                    
-                    trace_ram[write_ptr] <= entry;
+                if (capture_ok) begin
+                    trace_ram[{write_ptr, 2'd0}] <= {32'b0, axi_araddr};
+                    trace_ram[{write_ptr, 2'd1}] <= 64'b0;
+                    trace_ram[{write_ptr, 2'd2}] <= {32'b0, global_timestamp};
+                    trace_ram[{write_ptr, 2'd3}] <= {54'b0, 1'b1, 1'b0, 8'b0};  // channel=1 (read), phase=0 (req)
                     write_ptr <= write_ptr + 1;
                     if (entry_count < DEPTH) entry_count <= entry_count + 1;
-                    if (write_ptr == DEPTH-1) full <= 1;
+                    if (write_ptr == PTR_W'(DEPTH - 1)) full <= 1;
                 end
             end
 
-            // Capture R (read data/response)
-            if (running && !full && r_handshake) begin
-                logic [127:0] entry;
-                entry[31:0]    = 32'h0;  // No address for R
-                entry[95:32]   = axi_rdata;
-                entry[103:96]  = {6'b0, axi_rresp};
-                entry[104]     = 1'b1;  // Read channel
-                entry[105]     = 1'b1;  // Response phase
-                entry[127:106] = global_timestamp[21:0];
-                
-                trace_ram[write_ptr] <= entry;
+            // Capture read response
+            if (r_handshake && capture_ok) begin
+                trace_ram[{write_ptr, 2'd0}] <= 64'b0;  // No address for response
+                trace_ram[{write_ptr, 2'd1}] <= axi_rdata;
+                trace_ram[{write_ptr, 2'd2}] <= {32'b0, global_timestamp};
+                trace_ram[{write_ptr, 2'd3}] <= {54'b0, 1'b1, 1'b1, 6'b0, axi_rresp};  // channel=1, phase=1 (resp)
                 write_ptr <= write_ptr + 1;
                 if (entry_count < DEPTH) entry_count <= entry_count + 1;
-                if (write_ptr == DEPTH-1) full <= 1;
-                
-                r_seen <= 1;
+                if (write_ptr == PTR_W'(DEPTH - 1)) full <= 1;
+            end
+
+            // Control writes
+            if (s_awvalid && s_wvalid && s_awaddr[10:3] == 0) begin
+                if (s_wdata[0]) running <= 1;  // start
+                if (s_wdata[1]) running <= 0;  // stop
+                if (s_wdata[2]) begin          // clear
+                    write_ptr <= 0;
+                    entry_count <= 0;
+                    full <= 0;
+                    aw_count <= 0;
+                    ar_count <= 0;
+                end
             end
         end
     end
 
-    // Read from trace RAM
-    assign read_entry = trace_ram[read_ptr];
-
     //=========================================================================
-    // Read Mux
+    // Write response
     //=========================================================================
+    logic wr_pending;
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            dbg_rdata <= 32'h0;
+            wr_pending <= 0;
         end else begin
-        case (dbg_addr[7:2])
-            6'h00: dbg_rdata <= {19'b0, r_seen, ar_seen, b_seen, w_seen, aw_seen,
-                                6'b0, full, running};
-            6'h01: dbg_rdata <= 32'b0;  // Control (write-only)
-            6'h02: dbg_rdata <= {{(32-PTR_W){1'b0}}, write_ptr};
-            6'h03: dbg_rdata <= {{(32-PTR_W-1){1'b0}}, entry_count};
-            6'h04: dbg_rdata <= aw_count;
-            6'h05: dbg_rdata <= ar_count;
-            
-            6'h08: dbg_rdata <= {{(32-PTR_W){1'b0}}, read_ptr};
-            6'h09: dbg_rdata <= read_entry[31:0];    // addr
-            6'h0A: dbg_rdata <= read_entry[63:32];   // data_lo
-            6'h0B: dbg_rdata <= read_entry[95:64];   // data_hi
-            6'h0C: dbg_rdata <= {read_entry[127:106], // timestamp
-                               read_entry[105],      // phase
-                               read_entry[104],      // channel
-                               read_entry[103:96]};  // strobe/resp
-            
-            default: dbg_rdata <= 32'hDEAD_BEEF;
-        endcase
+            if (s_awvalid && s_wvalid && !wr_pending)
+                wr_pending <= 1;
+            else if (wr_pending && s_bready)
+                wr_pending <= 0;
+        end
+    end
+    assign s_awready = !wr_pending;
+    assign s_wready = !wr_pending;
+    assign s_bvalid = wr_pending;
+
+    //=========================================================================
+    // Read logic
+    //=========================================================================
+    logic [63:0] rdata_next;
+    logic rd_pending;
+    logic [10:0] rd_addr;
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            rd_pending <= 0;
+            rd_addr <= 0;
+            s_rdata <= 0;
+            s_rvalid <= 0;
+        end else begin
+            if (s_arvalid && s_arready) begin
+                rd_pending <= 1;
+                rd_addr <= s_araddr;
+            end else if (rd_pending && !s_rvalid) begin
+                s_rdata <= rdata_next;
+                s_rvalid <= 1;
+                rd_pending <= 0;
+            end else if (s_rvalid && s_rready) begin
+                s_rvalid <= 0;
+            end
+        end
+    end
+    assign s_arready = !rd_pending && !s_rvalid;
+
+    // Read data mux
+    always_comb begin
+        rdata_next = 64'hDEAD_0002;  // Default for debug
+
+        if (rd_addr < 11'h040) begin
+            // Status registers 0x000-0x03F
+            case (rd_addr[5:3])
+                3'd0: rdata_next = {62'b0, full, running};          // 0x000
+                3'd1: rdata_next = {58'b0, write_ptr};              // 0x008
+                3'd2: rdata_next = {57'b0, entry_count};            // 0x010
+                3'd3: rdata_next = {32'b0, aw_count};               // 0x018
+                3'd4: rdata_next = {32'b0, ar_count};               // 0x020
+                3'd5: rdata_next = {32'b0, global_timestamp};       // 0x028
+                default: rdata_next = 64'b0;
+            endcase
+        end else begin
+            // Trace RAM 0x040+
+            // Entry N at 0x040 + N*0x20, QW M at offset M*8
+            // rd_addr[10:5] = entry index (0-63)
+            // rd_addr[4:3] = QW index (0-3)
+            if (rd_addr >= 11'h040) begin
+                rdata_next = trace_ram[{rd_addr[10:5] - 6'd2, rd_addr[4:3]}];
+            end
         end
     end
 

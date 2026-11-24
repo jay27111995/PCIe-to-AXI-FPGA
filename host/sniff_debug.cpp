@@ -1,4 +1,4 @@
-// Simple sniffer register debug
+// Simple sniffer register debug - new memory map
 #include "pcie-util.h"
 #include <cstdio>
 
@@ -12,7 +12,7 @@ int main(int argc, char* argv[]) {
     auto& bar = *pf.BARs[0];
     bar.map();
 
-    printf("=== Raw Register Reads ===\n\n");
+    printf("=== Sniffer Debug (New Memory Map) ===\n\n");
 
     // Test RAM first (known working)
     printf("RAM test:\n");
@@ -21,59 +21,89 @@ int main(int argc, char* argv[]) {
     printf("  0x1000: wrote 0xDEADBEEF12345678, read 0x%016lx %s\n", 
            ram_val, ram_val == 0xDEADBEEF12345678ULL ? "OK" : "FAIL");
 
-    // Now test sniffer registers with 64-bit reads
-    printf("\nPCIe Sniffer (0x2000) - 64-bit reads:\n");
-    for (uint32_t off = 0x2000; off <= 0x2020; off += 8) {
-        uint64_t val = bar.read64(off);
-        printf("  0x%04x: 0x%016lx (lo=0x%08x hi=0x%08x)\n", 
-               off, val, (uint32_t)val, (uint32_t)(val >> 32));
-    }
-
-    // Try individual 32-bit aligned 64-bit reads
-    printf("\nPCIe Sniffer - offset 0x2000:\n");
-    uint64_t v = bar.read64(0x2000);
-    printf("  status (0x2000): lo=0x%08x\n", (uint32_t)v);
-    printf("  control(0x2004): hi=0x%08x (write-only, expect 0)\n", (uint32_t)(v >> 32));
-
-    v = bar.read64(0x2008);
-    printf("  mode   (0x2008): lo=0x%08x\n", (uint32_t)v);
-    printf("  trigger(0x200C): hi=0x%08x\n", (uint32_t)(v >> 32));
-
-    v = bar.read64(0x2010);
-    printf("  wr_ptr (0x2010): lo=0x%08x (expect <256)\n", (uint32_t)v);
-    printf("  entries(0x2014): hi=0x%08x (expect <256)\n", (uint32_t)(v >> 32));
-
-    v = bar.read64(0x2018);
-    printf("  rx_cnt (0x2018): lo=0x%08x\n", (uint32_t)v);
-    printf("  tx_cnt (0x201C): hi=0x%08x\n", (uint32_t)(v >> 32));
-
-    // Start sniffer and do one write, then check again
-    printf("\n--- Starting sniffer, doing one RAM write ---\n");
-    bar.write64(0x2004, 0x4);  // clear
-    bar.write64(0x2004, 0x1);  // start
-    bar.write64(0x1008, 0xABCD);  // trigger some activity
-    bar.write64(0x2004, 0x2);  // stop
-
-    printf("\nAfter activity:\n");
+    // PCIe Sniffer - new memory map
+    printf("\nPCIe Sniffer (0x2000):\n");
+    printf("  New map: 0x000=ctrl/status, 0x008=wr_ptr, 0x010=count, etc.\n\n");
+    
+    uint64_t v;
+    
     v = bar.read64(0x2000);
-    printf("  status (0x2000): 0x%08x\n", (uint32_t)v);
+    printf("  0x2000 (status):     0x%016lx (running=%lu, full=%lu)\n", v, v&1, (v>>1)&1);
+    
+    v = bar.read64(0x2008);
+    printf("  0x2008 (write_ptr):  %lu\n", v);
     
     v = bar.read64(0x2010);
-    printf("  wr_ptr (0x2010): %u\n", (uint32_t)v);
-    printf("  entries(0x2014): %u\n", (uint32_t)(v >> 32));
-
+    printf("  0x2010 (entry_cnt):  %lu\n", v);
+    
     v = bar.read64(0x2018);
-    printf("  rx_cnt (0x2018): %u\n", (uint32_t)v);
-    printf("  tx_cnt (0x201C): %u\n", (uint32_t)(v >> 32));
+    printf("  0x2018 (rx_count):   %lu\n", v);
+    
+    v = bar.read64(0x2020);
+    printf("  0x2020 (tx_count):   %lu\n", v);
+    
+    v = bar.read64(0x2028);
+    printf("  0x2028 (timestamp):  %lu\n", v);
 
-    // AXI sniffer
+    // Test start/stop/clear
+    printf("\n--- Testing control ---\n");
+    
+    printf("Writing clear (0x4) to 0x2000...\n");
+    bar.write64(0x2000, 0x4);
+    v = bar.read64(0x2008);
+    printf("  write_ptr after clear: %lu (expect 0)\n", v);
+    
+    printf("Writing start (0x1) to 0x2000...\n");
+    bar.write64(0x2000, 0x1);
+    v = bar.read64(0x2000);
+    printf("  status after start: running=%lu (expect 1)\n", v & 1);
+    
+    // Trigger some activity by reading RAM
+    bar.read64(0x1000);
+    bar.read64(0x1008);
+    
+    printf("Writing stop (0x2) to 0x2000...\n");
+    bar.write64(0x2000, 0x2);
+    v = bar.read64(0x2000);
+    printf("  status after stop: running=%lu (expect 0)\n", v & 1);
+    
+    // Check counters
+    v = bar.read64(0x2010);
+    printf("  entry_count: %lu\n", v);
+    v = bar.read64(0x2018);
+    printf("  rx_count: %lu\n", v);
+    v = bar.read64(0x2020);
+    printf("  tx_count: %lu\n", v);
+
+    // Read last RX
+    printf("\nLast RX TLP:\n");
+    uint64_t hdr0 = bar.read64(0x2040);
+    uint64_t hdr1 = bar.read64(0x2048);
+    printf("  hdr: 0x%016lx 0x%016lx\n", hdr0, hdr1);
+
+    // Read last TX
+    printf("\nLast TX TLP:\n");
+    hdr0 = bar.read64(0x2080);
+    hdr1 = bar.read64(0x2088);
+    printf("  hdr: 0x%016lx 0x%016lx\n", hdr0, hdr1);
+
+    // AXI Slave Sniffer
     printf("\nAXI Slave Sniffer (0x3000):\n");
     v = bar.read64(0x3000);
-    printf("  status (0x3000): 0x%08x\n", (uint32_t)v);
-    
+    printf("  0x3000 (status):     0x%016lx (running=%lu, full=%lu)\n", v, v&1, (v>>1)&1);
     v = bar.read64(0x3008);
-    printf("  wr_ptr (0x3008): %u\n", (uint32_t)v);
-    printf("  entries(0x300C): %u\n", (uint32_t)(v >> 32));
+    printf("  0x3008 (write_ptr):  %lu\n", v);
+    v = bar.read64(0x3010);
+    printf("  0x3010 (entry_cnt):  %lu\n", v);
+
+    // AXI Master Sniffer
+    printf("\nAXI Master Sniffer (0x3800):\n");
+    v = bar.read64(0x3800);
+    printf("  0x3800 (status):     0x%016lx (running=%lu, full=%lu)\n", v, v&1, (v>>1)&1);
+    v = bar.read64(0x3808);
+    printf("  0x3808 (write_ptr):  %lu\n", v);
+    v = bar.read64(0x3810);
+    printf("  0x3810 (entry_cnt):  %lu\n", v);
 
     printf("\nDone.\n");
     return 0;

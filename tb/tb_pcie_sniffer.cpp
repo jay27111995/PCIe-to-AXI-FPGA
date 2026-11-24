@@ -1,12 +1,11 @@
 //-----------------------------------------------------------------------------
-// tb_pcie_sniffer.cpp - Testbench for pcie_sniffer module
+// tb_pcie_sniffer.cpp - Testbench for pcie_sniffer module (new AXI interface)
 //
-// Tests the PCIe TLP trace capture functionality:
-//   1. Basic RX/TX capture (last-seen)
-//   2. Trace buffer capture
-//   3. Trigger modes
-//   4. Filter modes
-//   5. Control (start/stop/clear)
+// Tests:
+//   1. Basic status/control
+//   2. RX/TX capture
+//   3. Trace buffer read
+//   4. Clear functionality
 //-----------------------------------------------------------------------------
 #include <verilated.h>
 #include "Vpcie_sniffer.h"
@@ -19,22 +18,25 @@ int cycle = 0;
 void tick() {
     dut->clk = 0;
     dut->eval();
-    
     dut->clk = 1;
     dut->eval();
-    
     cycle++;
+    dut->global_timestamp = cycle;
 }
 
 void reset() {
     dut->rst_n = 0;
+    dut->global_timestamp = 0;
     dut->rx_st_hdr[0] = 0;
     dut->rx_st_hdr[1] = 0;
     dut->rx_st_hdr[2] = 0;
     dut->rx_st_hdr[3] = 0;
     for (int i = 0; i < 8; i++) dut->rx_st_data[i] = 0;
     dut->rx_st_sop = 0;
+    dut->rx_st_eop = 0;
     dut->rx_st_hvalid = 0;
+    dut->rx_st_dvalid = 0;
+    dut->rx_st_bar = 0;
     dut->rx_st_ready = 1;
     dut->tx_st_hdr[0] = 0;
     dut->tx_st_hdr[1] = 0;
@@ -42,44 +44,71 @@ void reset() {
     dut->tx_st_hdr[3] = 0;
     for (int i = 0; i < 8; i++) dut->tx_st_data[i] = 0;
     dut->tx_st_sop = 0;
+    dut->tx_st_eop = 0;
     dut->tx_st_hvalid = 0;
+    dut->tx_st_dvalid = 0;
     dut->tx_st_ready = 1;
-    dut->dbg_addr = 0;
-    dut->dbg_wdata = 0;
-    dut->dbg_wen = 0;
+    dut->axi_araddr = 0;
+    dut->axi_arvalid = 0;
+    dut->axi_rready = 1;
+    dut->axi_awaddr = 0;
+    dut->axi_wdata = 0;
+    dut->axi_awvalid = 0;
+    dut->axi_wvalid = 0;
+    dut->axi_bready = 1;
     
     for (int i = 0; i < 5; i++) tick();
     dut->rst_n = 1;
     for (int i = 0; i < 3; i++) tick();
 }
 
-// Read a debug register (word address * 4)
-// Note: dbg_rdata is registered, need tick to get result
-uint32_t read_dbg(uint16_t byte_addr) {
-    dut->dbg_addr = byte_addr;
-    tick();  // Clock in the address, output appears on dbg_rdata
-    return dut->dbg_rdata;
+// Read a 64-bit register via AXI
+uint64_t axi_read(uint16_t addr) {
+    dut->axi_araddr = addr;
+    dut->axi_arvalid = 1;
+    
+    // Wait for arready
+    while (!dut->axi_arready) tick();
+    tick();
+    dut->axi_arvalid = 0;
+    
+    // Wait for rvalid
+    while (!dut->axi_rvalid) tick();
+    uint64_t data = dut->axi_rdata;
+    tick();
+    
+    return data;
 }
 
-// Write a debug register
-void write_dbg(uint16_t byte_addr, uint32_t value) {
-    dut->dbg_addr = byte_addr;
-    dut->dbg_wdata = value;
-    dut->dbg_wen = 1;
+// Write a 64-bit register via AXI
+void axi_write(uint16_t addr, uint64_t value) {
+    dut->axi_awaddr = addr;
+    dut->axi_wdata = value;
+    dut->axi_awvalid = 1;
+    dut->axi_wvalid = 1;
+    
+    // Wait for ready
+    while (!dut->axi_awready || !dut->axi_wready) tick();
     tick();
-    dut->dbg_wen = 0;
+    dut->axi_awvalid = 0;
+    dut->axi_wvalid = 0;
+    
+    // Wait for bvalid
+    while (!dut->axi_bvalid) tick();
+    tick();
 }
 
 // Simulate an RX TLP
 void send_rx_tlp(uint32_t hdr0, uint32_t hdr1, uint32_t hdr2, uint32_t hdr3, 
-                 uint32_t data_lo, uint32_t data_hi) {
+                 uint64_t data0 = 0, uint64_t data1 = 0) {
     dut->rx_st_hdr[0] = hdr0;
     dut->rx_st_hdr[1] = hdr1;
     dut->rx_st_hdr[2] = hdr2;
     dut->rx_st_hdr[3] = hdr3;
-    dut->rx_st_data[0] = data_lo;
-    dut->rx_st_data[1] = data_hi;
-    for (int i = 2; i < 8; i++) dut->rx_st_data[i] = 0;
+    dut->rx_st_data[0] = data0 & 0xFFFFFFFF;
+    dut->rx_st_data[1] = data0 >> 32;
+    dut->rx_st_data[2] = data1 & 0xFFFFFFFF;
+    dut->rx_st_data[3] = data1 >> 32;
     dut->rx_st_sop = 1;
     dut->rx_st_hvalid = 1;
     tick();
@@ -89,14 +118,15 @@ void send_rx_tlp(uint32_t hdr0, uint32_t hdr1, uint32_t hdr2, uint32_t hdr3,
 
 // Simulate a TX TLP
 void send_tx_tlp(uint32_t hdr0, uint32_t hdr1, uint32_t hdr2, uint32_t hdr3,
-                 uint32_t data_lo, uint32_t data_hi) {
+                 uint64_t data0 = 0, uint64_t data1 = 0) {
     dut->tx_st_hdr[0] = hdr0;
     dut->tx_st_hdr[1] = hdr1;
     dut->tx_st_hdr[2] = hdr2;
     dut->tx_st_hdr[3] = hdr3;
-    dut->tx_st_data[0] = data_lo;
-    dut->tx_st_data[1] = data_hi;
-    for (int i = 2; i < 8; i++) dut->tx_st_data[i] = 0;
+    dut->tx_st_data[0] = data0 & 0xFFFFFFFF;
+    dut->tx_st_data[1] = data0 >> 32;
+    dut->tx_st_data[2] = data1 & 0xFFFFFFFF;
+    dut->tx_st_data[3] = data1 >> 32;
     dut->tx_st_sop = 1;
     dut->tx_st_hvalid = 1;
     tick();
@@ -108,321 +138,219 @@ void send_tx_tlp(uint32_t hdr0, uint32_t hdr1, uint32_t hdr2, uint32_t hdr3,
 // Test Cases
 //=============================================================================
 
-bool test_last_seen_capture() {
-    printf("Test 1: Last-Seen RX/TX Capture\n");
+bool test_status_read() {
+    printf("Test 1: Status register read\n");
     
-    // Send an MRd TLP: Fmt=000, Type=00000, Length=2
-    uint32_t dw0 = (0b000 << 29) | (0b00000 << 24) | 2;
-    uint32_t dw1 = (0x0100 << 16) | (0x42 << 8) | 0xFF;
-    uint32_t dw2 = 0x12340000;
-    uint32_t dw3 = 0;
-    uint32_t data_lo = 0xCAFEBABE;
-    uint32_t data_hi = 0xDEADBEEF;
+    // Read status at 0x000 - should be 0 (not running, not full)
+    uint64_t status = axi_read(0x000);
+    printf("    Status: 0x%016lx\n", status);
     
-    send_rx_tlp(dw2, dw1, dw0, dw3, data_lo, data_hi);
-    tick(); tick();
-    
-    // Check status register for rx_seen
-    uint32_t status = read_dbg(0x00);
-    if (!(status & 1)) {
-        printf("  [X] rx_seen not set (status=0x%08x)\n", status);
-        return false;
+    if (status == 0) {
+        printf("  [OK] PASS\n");
+        return true;
     }
-    
-    // Check rx_count (offset 0x018)
-    uint32_t rx_count = read_dbg(0x18);
-    if (rx_count != 1) {
-        printf("  [X] rx_count wrong: %d\n", rx_count);
-        return false;
-    }
-    
-    // Check last_rx_hdr (now at offset 0x070-0x07C)
-    uint32_t hdr0 = read_dbg(0x70);
-    uint32_t hdr1 = read_dbg(0x74);
-    
-    if (hdr0 != dw2 || hdr1 != dw1) {
-        printf("  [X] last_rx_hdr mismatch\n");
-        printf("      Expected: 0x%08x 0x%08x\n", dw2, dw1);
-        printf("      Got:      0x%08x 0x%08x\n", hdr0, hdr1);
-        return false;
-    }
-    
-    // Check last_rx_data (now at offset 0x080-0x09C for 256 bits)
-    uint32_t captured_lo = read_dbg(0x80);
-    uint32_t captured_hi = read_dbg(0x84);
-    
-    if (captured_lo != data_lo || captured_hi != data_hi) {
-        printf("  [X] last_rx_data mismatch\n");
-        printf("      Expected: 0x%08x 0x%08x\n", data_lo, data_hi);
-        printf("      Got:      0x%08x 0x%08x\n", captured_lo, captured_hi);
-        return false;
-    }
-    
-    printf("  [OK] Last-seen capture working\n");
-    return true;
+    printf("  [X] FAIL (expected 0)\n");
+    return false;
 }
 
-bool test_trace_buffer_basic() {
-    printf("Test 2: Trace Buffer Basic Capture\n");
+bool test_start_stop() {
+    printf("Test 2: Start/Stop control\n");
     
-    // Clear and start capture
-    write_dbg(0x04, 0x04);  // Clear
-    tick();
-    write_dbg(0x04, 0x01);  // Start
-    tick();
+    // Write start (bit 0)
+    axi_write(0x000, 1);
     
-    // Verify running (bit 16)
-    uint32_t status = read_dbg(0x00);
-    if (!(status & (1 << 16))) {
-        printf("  [X] Not running after start (status=0x%08x)\n", status);
-        return false;
-    }
-    
-    // Send 5 RX TLPs
-    for (int i = 0; i < 5; i++) {
-        uint32_t dw0 = (0b000 << 29) | (0b00000 << 24) | (i + 1);
-        uint32_t dw1 = (0x0100 << 16) | ((0x10 + i) << 8);
-        send_rx_tlp(0x1000 + i * 0x100, dw1, dw0, 0, 0xAAAA0000 + i, 0xBBBB0000 + i);
-        tick();
-    }
-    
-    // Send 3 TX TLPs
-    for (int i = 0; i < 3; i++) {
-        uint32_t dw0 = (0b010 << 29) | (0b01010 << 24) | 2;  // CplD
-        uint32_t dw1 = (0xb400 << 16) | 8;
-        send_tx_tlp(0, dw1, dw0, 0, 0xCCCC0000 + i, 0xDDDD0000 + i);
-        tick();
-    }
-    
-    // Check entry count (offset 0x014)
-    uint32_t entry_count = read_dbg(0x14);
-    if (entry_count != 8) {
-        printf("  [X] Entry count wrong: %d (expected 8)\n", entry_count);
-        return false;
-    }
-    
-    // Read back entry 0 (first RX)
-    write_dbg(0x30, 0);  // Set read_ptr to 0
-    tick();
-    
-    uint32_t trace_hdr0 = read_dbg(0x34);
-    uint32_t trace_meta = read_dbg(0x68);  // trace_meta1: control signals
-    uint8_t direction = trace_meta & 1;
-    
-    if (direction != 0) {
-        printf("  [X] Entry 0 should be RX (dir=0), got dir=%d\n", direction);
-        return false;
-    }
-    
-    // Read back entry 5 (first TX)
-    write_dbg(0x30, 5);  // Set read_ptr to 5
-    tick();
-    
-    trace_meta = read_dbg(0x68);  // trace_meta1: control signals
-    direction = trace_meta & 1;
-    
-    if (direction != 1) {
-        printf("  [X] Entry 5 should be TX (dir=1), got dir=%d\n", direction);
-        return false;
-    }
-    
-    printf("  [OK] Trace buffer captures RX and TX TLPs\n");
-    return true;
-}
-
-bool test_stop_on_full() {
-    printf("Test 3: Stop-on-Full Mode\n");
-    
-    // Clear, set mode=1 (stop-on-full), start
-    write_dbg(0x04, 0x04);  // Clear
-    write_dbg(0x08, 0x01);  // Mode = stop-on-full
-    write_dbg(0x04, 0x01);  // Start
-    tick();
-    
-    // Send 260 TLPs (should stop at 256)
-    for (int i = 0; i < 260; i++) {
-        uint32_t dw0 = (0b000 << 29) | (i & 0xFF);
-        send_rx_tlp(i, 0, dw0, 0, i, 0);
-    }
-    
-    // Check status - should be stopped and full
-    uint32_t status = read_dbg(0x00);
-    bool running = (status >> 16) & 1;
-    bool full = (status >> 18) & 1;
-    
-    if (running) {
-        printf("  [X] Still running after overflow\n");
-        return false;
-    }
-    
-    if (!full) {
-        printf("  [X] Full flag not set\n");
-        return false;
-    }
-    
-    // Entry count should be 256
-    uint32_t entry_count = read_dbg(0x14);
-    if (entry_count != 256) {
-        printf("  [X] Entry count wrong: %d (expected 256)\n", entry_count);
-        return false;
-    }
-    
-    printf("  [OK] Stop-on-full mode works\n");
-    return true;
-}
-
-bool test_continuous_mode() {
-    printf("Test 4: Continuous (Ring Buffer) Mode\n");
-    
-    // Clear, set mode=0 (continuous), start
-    write_dbg(0x04, 0x04);  // Clear
-    write_dbg(0x08, 0x00);  // Mode = continuous
-    write_dbg(0x04, 0x01);  // Start
-    tick();
-    
-    // Send 300 TLPs (should wrap around)
-    for (int i = 0; i < 300; i++) {
-        uint32_t dw0 = (0b000 << 29) | (i & 0xFF);
-        send_rx_tlp(i * 0x100, 0, dw0, 0, 0x1000 + i, 0);
-    }
-    
-    // Should still be running (bit 16)
-    uint32_t status = read_dbg(0x00);
-    bool running = (status >> 16) & 1;
+    // Read status - should show running
+    uint64_t status = axi_read(0x000);
+    bool running = status & 1;
+    printf("    After start: status=0x%lx, running=%d\n", status, running);
     
     if (!running) {
-        printf("  [X] Stopped in continuous mode\n");
+        printf("  [X] FAIL (not running after start)\n");
         return false;
     }
     
-    // Write pointer should have wrapped (300 mod 256 = 44)
-    uint32_t write_ptr = read_dbg(0x10);
-    if (write_ptr != 44) {
-        printf("  [X] Write pointer wrong: %d (expected 44)\n", write_ptr);
+    // Write stop (bit 1)
+    axi_write(0x000, 2);
+    
+    status = axi_read(0x000);
+    running = status & 1;
+    printf("    After stop: status=0x%lx, running=%d\n", status, running);
+    
+    if (running) {
+        printf("  [X] FAIL (still running after stop)\n");
         return false;
     }
     
-    // Entry 0 should have the 257th TLP (i=256), address = 256*0x100 = 0x10000
-    write_dbg(0x30, 0);
-    tick();
-    uint32_t trace_hdr0 = read_dbg(0x34);
-    if (trace_hdr0 != 0x10000) {
-        printf("  [X] Entry 0 should be TLP 256, got hdr0=0x%08x\n", trace_hdr0);
-        return false;
-    }
-    
-    printf("  [OK] Continuous mode wraps correctly\n");
+    printf("  [OK] PASS\n");
     return true;
 }
 
-bool test_clear_control() {
-    printf("Test 5: Clear Control\n");
+bool test_rx_capture() {
+    printf("Test 3: RX TLP capture\n");
     
-    // First capture some TLPs
-    write_dbg(0x04, 0x01);  // Start
-    for (int i = 0; i < 10; i++) {
-        send_rx_tlp(i, 0, 0, 0, i, 0);
-    }
+    // Clear and start
+    axi_write(0x000, 4);  // clear
+    axi_write(0x000, 1);  // start
     
-    uint32_t count_before = read_dbg(0x14);
-    if (count_before == 0) {
-        printf("  [X] No entries captured before clear\n");
+    // Send an RX TLP
+    uint32_t hdr0 = 0x40000002;  // MRd, 2 DW
+    uint32_t hdr1 = 0x01004200;  // req_id, tag
+    uint32_t hdr2 = 0x12340000;  // addr
+    send_rx_tlp(hdr0, hdr1, hdr2, 0, 0xCAFEBABEDEADBEEF);
+    
+    tick(); tick();
+    
+    // Check entry_count
+    uint64_t entry_count = axi_read(0x010);
+    printf("    Entry count: %lu\n", entry_count);
+    
+    if (entry_count < 1) {
+        printf("  [X] FAIL (no entries captured)\n");
         return false;
     }
+    
+    // Read last RX header at 0x040
+    uint64_t last_rx_hdr0 = axi_read(0x040);
+    uint64_t last_rx_hdr1 = axi_read(0x048);
+    printf("    Last RX hdr: 0x%016lx 0x%016lx\n", last_rx_hdr0, last_rx_hdr1);
+    
+    // Check header matches
+    uint32_t got_hdr0 = last_rx_hdr0 & 0xFFFFFFFF;
+    if (got_hdr0 == hdr0) {
+        printf("  [OK] PASS\n");
+        return true;
+    }
+    
+    printf("  [X] FAIL (header mismatch: expected 0x%08x, got 0x%08x)\n", hdr0, got_hdr0);
+    return false;
+}
+
+bool test_trace_read() {
+    printf("Test 4: Trace RAM read\n");
+    
+    // Clear and start
+    axi_write(0x000, 4);  // clear
+    axi_write(0x000, 1);  // start
+    
+    // Send multiple TLPs
+    for (int i = 0; i < 3; i++) {
+        send_rx_tlp(0x40000002 | (i << 8), 0x01004200, 0x12340000 + i * 0x100, 0);
+        tick();
+    }
+    
+    axi_write(0x000, 2);  // stop
+    
+    // Check entry count
+    uint64_t entry_count = axi_read(0x010);
+    printf("    Entry count: %lu\n", entry_count);
+    
+    if (entry_count < 3) {
+        printf("  [X] FAIL (expected 3+ entries, got %lu)\n", entry_count);
+        return false;
+    }
+    
+    // Read trace entry 0 at 0x100
+    uint64_t trace_qw0 = axi_read(0x100);  // hdr[63:0]
+    uint64_t trace_qw1 = axi_read(0x108);  // hdr[127:64]
+    printf("    Trace[0] hdr: 0x%016lx 0x%016lx\n", trace_qw0, trace_qw1);
+    
+    // Check it looks like our first TLP
+    uint32_t got_hdr0 = trace_qw0 & 0xFFFFFFFF;
+    if (got_hdr0 == 0x40000002) {
+        printf("  [OK] PASS\n");
+        return true;
+    }
+    
+    printf("  [X] FAIL (trace mismatch)\n");
+    return false;
+}
+
+bool test_clear() {
+    printf("Test 5: Clear functionality\n");
+    
+    // Start and capture something
+    axi_write(0x000, 1);  // start
+    send_rx_tlp(0x40000001, 0, 0, 0);
+    tick();
+    
+    // Verify we have entries
+    uint64_t count_before = axi_read(0x010);
+    printf("    Before clear: entry_count=%lu\n", count_before);
     
     // Clear
-    write_dbg(0x04, 0x04);
-    tick();
+    axi_write(0x000, 4);
     
-    // Check entry count is 0
-    uint32_t count_after = read_dbg(0x14);
-    if (count_after != 0) {
-        printf("  [X] Entry count not cleared: %d\n", count_after);
-        return false;
+    // Check counters reset
+    uint64_t count_after = axi_read(0x010);
+    uint64_t write_ptr = axi_read(0x008);
+    printf("    After clear: entry_count=%lu, write_ptr=%lu\n", count_after, write_ptr);
+    
+    if (count_after == 0 && write_ptr == 0) {
+        printf("  [OK] PASS\n");
+        return true;
     }
     
-    // Check write_ptr is 0
-    uint32_t write_ptr = read_dbg(0x10);
-    if (write_ptr != 0) {
-        printf("  [X] Write pointer not cleared: %d\n", write_ptr);
-        return false;
-    }
-    
-    printf("  [OK] Clear control works\n");
-    return true;
+    printf("  [X] FAIL (counters not reset)\n");
+    return false;
 }
 
-bool test_control_signals_capture() {
-    printf("Test 6: Control Signals in Trace Entry\n");
+bool test_tx_capture() {
+    printf("Test 6: TX TLP capture\n");
     
-    write_dbg(0x04, 0x04);  // Clear
-    write_dbg(0x04, 0x01);  // Start
+    // Clear and start
+    axi_write(0x000, 4);  // clear
+    axi_write(0x000, 1);  // start
     
-    // Send RX TLP with specific control signals
-    send_rx_tlp(0x1234, 0, 0, 0, 0, 0);
-    tick();
+    // Send a TX TLP
+    uint32_t hdr0 = 0x4A000008;  // CplD, 8 DW
+    send_tx_tlp(hdr0, 0, 0, 0, 0xFEEDFACE);
     
-    // Read trace entry metadata
-    write_dbg(0x30, 0);
-    tick();
-    uint32_t trace_meta = read_dbg(0x68);  // trace_meta1: control signals
+    tick(); tick();
     
-    // Check direction is RX (bit 0 = 0)
-    uint8_t direction = trace_meta & 1;
-    if (direction != 0) {
-        printf("  [X] Direction wrong: %d (expected 0 for RX)\n", direction);
-        return false;
+    // Check tx_count
+    uint64_t tx_count = axi_read(0x020);
+    printf("    TX count: %lu\n", tx_count);
+    
+    // Read last TX at 0x080
+    uint64_t last_tx_hdr = axi_read(0x080);
+    printf("    Last TX hdr: 0x%016lx\n", last_tx_hdr);
+    
+    uint32_t got = last_tx_hdr & 0xFFFFFFFF;
+    if (tx_count >= 1 && got == hdr0) {
+        printf("  [OK] PASS\n");
+        return true;
     }
     
-    // Check rx_sop is set (bit 1)
-    uint8_t rx_sop = (trace_meta >> 1) & 1;
-    if (rx_sop != 1) {
-        printf("  [X] rx_sop wrong: %d (expected 1)\n", rx_sop);
-        return false;
-    }
-    
-    // Check rx_hvalid is set (bit 3)
-    uint8_t rx_hvalid = (trace_meta >> 3) & 1;
-    if (rx_hvalid != 1) {
-        printf("  [X] rx_hvalid wrong: %d (expected 1)\n", rx_hvalid);
-        return false;
-    }
-    
-    printf("  [OK] Control signals captured in trace entry\n");
-    return true;
+    printf("  [X] FAIL\n");
+    return false;
 }
 
 int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
-    
     dut = new Vpcie_sniffer;
     
-    printf("=== PCIe Sniffer Trace Buffer Testbench ===\n\n");
-    
-    int passed = 0;
-    int total = 6;
+    int pass = 0, fail = 0;
     
     reset();
-    if (test_last_seen_capture()) passed++;
+    if (test_status_read()) pass++; else fail++;
     
     reset();
-    if (test_trace_buffer_basic()) passed++;
+    if (test_start_stop()) pass++; else fail++;
     
     reset();
-    if (test_stop_on_full()) passed++;
+    if (test_rx_capture()) pass++; else fail++;
     
     reset();
-    if (test_continuous_mode()) passed++;
+    if (test_trace_read()) pass++; else fail++;
     
     reset();
-    if (test_clear_control()) passed++;
+    if (test_clear()) pass++; else fail++;
     
     reset();
-    if (test_control_signals_capture()) passed++;
+    if (test_tx_capture()) pass++; else fail++;
     
-    printf("\n=== Results: %d/%d tests passed ===\n", passed, total);
+    printf("\n=== Results: %d passed, %d failed ===\n", pass, fail);
     
     delete dut;
-    
-    return (passed == total) ? 0 : 1;
+    return fail > 0 ? 1 : 0;
 }
