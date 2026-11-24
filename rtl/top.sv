@@ -229,8 +229,8 @@ module top
     assign dma_s_awaddr  = brg_awaddr;
     assign dma_s_wdata   = brg_wdata;
     assign dma_s_wstrb   = brg_wstrb;
-    assign dma_s_awvalid = brg_awvalid && !wr_to_ram;
-    assign dma_s_wvalid  = brg_wvalid  && !wr_to_ram;
+    assign dma_s_awvalid = brg_awvalid && !wr_to_ram && !wr_to_pcie_dbg && !wr_to_axi_dbg;
+    assign dma_s_wvalid  = brg_wvalid  && !wr_to_ram && !wr_to_pcie_dbg && !wr_to_axi_dbg;
     assign dma_s_bready  = brg_bready;
 
     assign ram_bar_awaddr  = brg_awaddr;
@@ -240,10 +240,22 @@ module top
     assign ram_bar_wvalid  = brg_wvalid  && wr_to_ram;
     assign ram_bar_bready  = brg_bready;
 
-    assign brg_awready = wr_to_ram ? ram_bar_awready : dma_s_awready;
-    assign brg_wready  = wr_to_ram ? ram_bar_wready  : dma_s_wready;
-    assign brg_bvalid  = dma_s_bvalid | ram_bar_bvalid;
-    assign brg_bresp   = dma_s_bvalid ? dma_s_bresp : ram_bar_bresp;
+    // Debug write response - generate immediate bvalid for sniffer writes
+    wire wr_to_dbg = wr_to_pcie_dbg || wr_to_axi_dbg;
+    logic dbg_bvalid;
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            dbg_bvalid <= 0;
+        else if (brg_awvalid && brg_wvalid && wr_to_dbg && !dbg_bvalid)
+            dbg_bvalid <= 1;
+        else if (dbg_bvalid && brg_bready)
+            dbg_bvalid <= 0;
+    end
+
+    assign brg_awready = wr_to_dbg ? !dbg_bvalid : (wr_to_ram ? ram_bar_awready : dma_s_awready);
+    assign brg_wready  = wr_to_dbg ? !dbg_bvalid : (wr_to_ram ? ram_bar_wready  : dma_s_wready);
+    assign brg_bvalid  = dma_s_bvalid | ram_bar_bvalid | dbg_bvalid;
+    assign brg_bresp   = dma_s_bvalid ? dma_s_bresp : (ram_bar_bvalid ? ram_bar_bresp : 2'b00);
 
     // Read path - with debug register support
     // Define rd_to_dbg BEFORE using it (some synthesis tools are sensitive to ordering)
@@ -271,8 +283,10 @@ module top
     logic [1:0]  dbg_rd_state;         // 0=idle, 1=addr latched, 2=wait sniffer, 3=done
     wire         dbg_ar_handshake = brg_arvalid && brg_arready && rd_to_dbg;
     
-    // Latched address drives sniffers
-    wire [11:0] dbg_addr_to_sniffer = (dbg_rd_state != 0) ? dbg_addr_latched : brg_araddr[11:0];
+    // Address to sniffers: use write addr for writes, read addr for reads
+    wire [11:0] dbg_addr_for_write = brg_awaddr[11:0];
+    wire [11:0] dbg_addr_for_read = (dbg_rd_state != 0) ? dbg_addr_latched : brg_araddr[11:0];
+    wire [11:0] dbg_addr_to_sniffer = (pcie_dbg_wen || axi_dbg_wen) ? dbg_addr_for_write : dbg_addr_for_read;
     
     // Mux between PCIe sniffer and AXI sniffer data
     wire [31:0] dbg_rdata = dbg_sel_axi_latched ? axi_dbg_rdata : pcie_dbg_rdata;

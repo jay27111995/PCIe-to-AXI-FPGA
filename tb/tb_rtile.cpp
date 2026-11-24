@@ -408,6 +408,36 @@ int main(int argc, char** argv) {
         fail++; 
     }
 
+    // Test 11: Sniffer control write (clear/start/stop)
+    printf("Test 11: Sniffer control write\n");
+    // Write to PCIe sniffer control register at 0x2004
+    // bit 0 = start, bit 1 = stop, bit 2 = clear
+    send_mwr(0x2004, 0x4);  // Clear
+    for (int i = 0; i < 10; i++) tick();
+    send_mwr(0x2004, 0x1);  // Start
+    for (int i = 0; i < 10; i++) tick();
+    // Now read status at 0x2000 - should show running=1
+    send_mrd(0x2000, 0x80);
+    uint64_t status_data;
+    if (wait_cpld_any(0x80, &status_data)) {
+        uint32_t status = (uint32_t)status_data;
+        bool running = (status >> 16) & 1;
+        printf("    Status: 0x%08x, running=%d\n", status, running);
+        if (running) {
+            printf("  [OK] PASS\n");
+            pass++;
+        } else {
+            printf("  [X] FAIL (sniffer not running after start)\n");
+            fail++;
+        }
+    } else {
+        printf("  [X] FAIL (no status response)\n");
+        fail++;
+    }
+    // Stop the sniffer
+    send_mwr(0x2004, 0x2);  // Stop
+    for (int i = 0; i < 10; i++) tick();
+
     printf("\n=== Results: %d passed, %d failed ===\n", pass, fail);
     
     trace->close();

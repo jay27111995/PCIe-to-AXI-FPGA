@@ -160,8 +160,8 @@ void pcie_dump_trace(PCIe::BaseAddressRegister& bar, int count) {
     
     int to_dump = (count > 0 && (uint32_t)count < entry_count) ? count : entry_count;
     printf("\n=== PCIe TLP Trace (%u entries, showing %d) ===\n", entry_count, to_dump);
-    printf("  # | Cycle      | Dir | State      | Type  | Len | Header (DW0-DW3)\n");
-    printf("----+------------+-----+------------+-------+-----+------------------------------------------\n");
+    printf("  # | Time (us)  | Dir | State      | Type  | Details\n");
+    printf("----+------------+-----+------------+-------+--------------------------------------------------\n");
     
     for (int i = 0; i < to_dump; i++) {
         // Set read pointer (use 64-bit write for bridge compatibility)
@@ -185,22 +185,49 @@ void pcie_dump_trace(PCIe::BaseAddressRegister& bar, int count) {
         // Parse meta: [31:5] timestamp, [4:1] tx_state, [0] direction
         int dir = meta & 1;
         int state = (meta >> 1) & 0xF;
-        uint32_t timestamp = (meta >> 5) & 0x7FFFFFF;  // 27-bit timestamp
+        uint32_t timestamp = (meta >> 5) & 0x7FFFFFF;  // 27-bit cycle count
+        
+        // Convert cycles to microseconds (assume 250MHz = 4ns/cycle)
+        double time_us = timestamp * 0.004;  // cycles * 4ns / 1000
         
         // Parse TLP from header DW0: [31:29]=fmt, [28:24]=type, [9:0]=length
         int fmt = (hdr0 >> 29) & 0x7;
         int type = (hdr0 >> 24) & 0x1F;
         int len = hdr0 & 0x3FF;  // Length in DW
         
-        printf("%3d | %10u | %s  | %-10s | %-5s | %3d | %08x %08x %08x %08x\n",
-               i, timestamp, dir ? "TX" : "RX", tx_state_name(state), 
-               tlp_type_name(fmt, type), len, hdr0, hdr1, hdr2, hdr3);
+        printf("%3d | %10.3f | %s  | %-10s | %-5s | ", 
+               i, time_us, dir ? "TX" : "RX", tx_state_name(state), 
+               tlp_type_name(fmt, type));
+        
+        // Type-specific details
+        if (type == 0b00000 && !(fmt & 0x2)) {
+            // MRd: show address and length
+            uint32_t addr = (fmt & 0x1) ? hdr3 : hdr2;  // 4DW vs 3DW header
+            printf("addr=0x%08x len=%d DW", addr, len);
+        } else if (type == 0b00000 && (fmt & 0x2)) {
+            // MWr: show address and length
+            uint32_t addr = (fmt & 0x1) ? hdr3 : hdr2;
+            printf("addr=0x%08x len=%d DW", addr, len);
+        } else if (type == 0b01010) {
+            // CplD: show tag, byte count, lower addr
+            int cpl_status = (hdr1 >> 13) & 0x7;
+            int byte_count = hdr1 & 0xFFF;
+            int tag = (hdr2 >> 8) & 0xFF;
+            int lower_addr = hdr2 & 0x7F;
+            printf("tag=0x%02x BC=%d LA=0x%02x %s", 
+                   tag, byte_count, lower_addr,
+                   cpl_status ? "ERR" : "OK");
+        } else {
+            // Generic: show header
+            printf("hdr: %08x %08x %08x %08x", hdr0, hdr1, hdr2, hdr3);
+        }
+        printf("\n");
         
         // Print data if TLP has data (CplD, MWr)
         bool has_data = (fmt & 0x2);  // bit 1 of fmt indicates data present
         if (has_data && len > 0) {
             int dw_to_show = (len > 8) ? 8 : len;
-            printf("    Data (%d DW): ", len);
+            printf("      Data: ");
             for (int d = 0; d < dw_to_show; d++) {
                 printf("%08x ", data[d]);
             }
