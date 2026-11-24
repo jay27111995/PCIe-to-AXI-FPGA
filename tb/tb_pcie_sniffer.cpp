@@ -44,7 +44,6 @@ void reset() {
     dut->tx_st_sop = 0;
     dut->tx_st_hvalid = 0;
     dut->tx_st_ready = 1;
-    dut->tx_state = 0;
     dut->dbg_addr = 0;
     dut->dbg_wdata = 0;
     dut->dbg_wen = 0;
@@ -207,7 +206,7 @@ bool test_trace_buffer_basic() {
     tick();
     
     uint32_t trace_hdr0 = read_dbg(0x34);
-    uint32_t trace_meta = read_dbg(0x64);  // trace_meta now at 0x64
+    uint32_t trace_meta = read_dbg(0x68);  // trace_meta1: control signals
     uint8_t direction = trace_meta & 1;
     
     if (direction != 0) {
@@ -219,7 +218,7 @@ bool test_trace_buffer_basic() {
     write_dbg(0x30, 5);  // Set read_ptr to 5
     tick();
     
-    trace_meta = read_dbg(0x64);  // trace_meta now at 0x64
+    trace_meta = read_dbg(0x68);  // trace_meta1: control signals
     direction = trace_meta & 1;
     
     if (direction != 1) {
@@ -353,29 +352,43 @@ bool test_clear_control() {
     return true;
 }
 
-bool test_tx_state_capture() {
-    printf("Test 6: TX State in Trace Entry\n");
+bool test_control_signals_capture() {
+    printf("Test 6: Control Signals in Trace Entry\n");
     
     write_dbg(0x04, 0x04);  // Clear
     write_dbg(0x04, 0x01);  // Start
     
-    // Set tx_state and capture a TLP
-    dut->tx_state = 7;
+    // Send RX TLP with specific control signals
     send_rx_tlp(0x1234, 0, 0, 0, 0, 0);
     tick();
     
-    // Read trace entry metadata (now at 0x64 instead of 0x4C)
+    // Read trace entry metadata
     write_dbg(0x30, 0);
     tick();
-    uint32_t trace_meta = read_dbg(0x64);
-    uint8_t captured_state = (trace_meta >> 1) & 0xF;
+    uint32_t trace_meta = read_dbg(0x68);  // trace_meta1: control signals
     
-    if (captured_state != 7) {
-        printf("  [X] TX state wrong: %d (expected 7)\n", captured_state);
+    // Check direction is RX (bit 0 = 0)
+    uint8_t direction = trace_meta & 1;
+    if (direction != 0) {
+        printf("  [X] Direction wrong: %d (expected 0 for RX)\n", direction);
         return false;
     }
     
-    printf("  [OK] TX state captured in trace entry\n");
+    // Check rx_sop is set (bit 1)
+    uint8_t rx_sop = (trace_meta >> 1) & 1;
+    if (rx_sop != 1) {
+        printf("  [X] rx_sop wrong: %d (expected 1)\n", rx_sop);
+        return false;
+    }
+    
+    // Check rx_hvalid is set (bit 3)
+    uint8_t rx_hvalid = (trace_meta >> 3) & 1;
+    if (rx_hvalid != 1) {
+        printf("  [X] rx_hvalid wrong: %d (expected 1)\n", rx_hvalid);
+        return false;
+    }
+    
+    printf("  [OK] Control signals captured in trace entry\n");
     return true;
 }
 
@@ -405,7 +418,7 @@ int main(int argc, char** argv) {
     if (test_clear_control()) passed++;
     
     reset();
-    if (test_tx_state_capture()) passed++;
+    if (test_control_signals_capture()) passed++;
     
     printf("\n=== Results: %d/%d tests passed ===\n", passed, total);
     

@@ -1,18 +1,22 @@
 //-----------------------------------------------------------------------------
 // axi_sniffer.sv - AXI Bus Trace Capture
 //
-// Captures AXI transactions on the internal bus (bridge <-> DMA/RAM).
-// 64-entry trace buffer for AXI transactions.
+// Captures AXI transactions for debugging. Used for both:
+//   - AXI Slave sniffer (BAR access from host)
+//   - AXI Master sniffer (DMA to host memory)
+//
+// Uses global_timestamp input for event correlation across all sniffers.
+// 64-entry trace buffer (configurable via DEPTH parameter).
 //
 // Each trace entry (128 bits = 4 DWORDs):
 //   [31:0]    Address (AW or AR)
 //   [95:32]   Data (W or R, 64 bits)
 //   [103:96]  Strobe (W) or Response (R)
 //   [104]     Channel: 0=Write (AW/W/B), 1=Read (AR/R)
-//   [105]     Phase: 0=Request (AW/AR), 1=Response (B/R)
-//   [127:106] Timestamp (22 bits)
+//   [105]     Phase: 0=Request (AW/AR/W), 1=Response (B/R)
+//   [127:106] Timestamp (22 bits from global_timestamp)
 //
-// Register Map (directly mapped, e.g., 0x3000-0x3FFF):
+// Register Map:
 //   0x00: status      - [0] running, [1] full, [8] aw_seen, [9] w_seen, 
 //                       [10] b_seen, [11] ar_seen, [12] r_seen
 //   0x04: control     - [0] start, [1] stop, [2] clear
@@ -20,7 +24,6 @@
 //   0x0C: entry_count - Number of entries captured (0-64)
 //   0x10: aw_count    - AW transactions seen
 //   0x14: ar_count    - AR transactions seen
-//
 //   0x20: read_ptr    - Software sets this to select trace entry (0-63)
 //   0x24: trace_addr  - Selected entry address
 //   0x28: trace_data0 - Selected entry data [31:0]
@@ -32,6 +35,9 @@ module axi_sniffer #(
 )(
     input  logic        clk,
     input  logic        rst_n,
+
+    // Global timestamp (shared across all sniffers)
+    input  logic [31:0] global_timestamp,
 
     // Snoop AXI Write Channel
     input  logic [31:0] axi_awaddr,
@@ -78,7 +84,6 @@ module axi_sniffer #(
 
     // Counters
     logic [31:0] aw_count, ar_count;
-    logic [21:0] timestamp;
     
     // Seen flags
     logic aw_seen, w_seen, b_seen, ar_seen, r_seen;
@@ -112,7 +117,6 @@ module axi_sniffer #(
             read_ptr <= 0;
             aw_count <= 0;
             ar_count <= 0;
-            timestamp <= 0;
             aw_seen <= 0;
             w_seen <= 0;
             b_seen <= 0;
@@ -121,7 +125,6 @@ module axi_sniffer #(
             pending_awaddr <= 0;
             pending_awvalid <= 0;
         end else begin
-            timestamp <= timestamp + 1;
 
             // Control
             if (ctrl_clear) begin
@@ -161,7 +164,7 @@ module axi_sniffer #(
                 entry[103:96]  = axi_wstrb;
                 entry[104]     = 1'b0;  // Write channel
                 entry[105]     = 1'b0;  // Request phase
-                entry[127:106] = timestamp;
+                entry[127:106] = global_timestamp[21:0];
                 
                 trace_ram[write_ptr] <= entry;
                 write_ptr <= write_ptr + 1;
@@ -180,7 +183,7 @@ module axi_sniffer #(
                 entry[103:96]  = {6'b0, axi_bresp};
                 entry[104]     = 1'b0;  // Write channel
                 entry[105]     = 1'b1;  // Response phase
-                entry[127:106] = timestamp;
+                entry[127:106] = global_timestamp[21:0];
                 
                 trace_ram[write_ptr] <= entry;
                 write_ptr <= write_ptr + 1;
@@ -202,7 +205,7 @@ module axi_sniffer #(
                     entry[103:96]  = 8'h0;
                     entry[104]     = 1'b1;  // Read channel
                     entry[105]     = 1'b0;  // Request phase
-                    entry[127:106] = timestamp;
+                    entry[127:106] = global_timestamp[21:0];
                     
                     trace_ram[write_ptr] <= entry;
                     write_ptr <= write_ptr + 1;
@@ -219,7 +222,7 @@ module axi_sniffer #(
                 entry[103:96]  = {6'b0, axi_rresp};
                 entry[104]     = 1'b1;  // Read channel
                 entry[105]     = 1'b1;  // Response phase
-                entry[127:106] = timestamp;
+                entry[127:106] = global_timestamp[21:0];
                 
                 trace_ram[write_ptr] <= entry;
                 write_ptr <= write_ptr + 1;

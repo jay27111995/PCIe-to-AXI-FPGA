@@ -5,25 +5,38 @@ Intel R-Tile PCIe Gen5 x16 to internal bus bridge with DMA engine for Agilex 7 F
 ## Architecture
 
 ```
-Host CPU --PCIe Gen5 x16--> R-Tile IP --> pcie_axi_bridge --> Address Decoder
-                                               |                    |
-                                               |              +-----+-----+-----+-----+
-                                               |              |     |     |     |     |
-                                               |              v     v     v     v     v
-                                               |           DMA   RAM   PCIe   AXI   ...
-                                               |          Regs  (4KB) Sniff  Sniff
-                                               |
-                                               +--> PCIe TLP (Host MRd/MWr/MSI-X)
+Host CPU ──PCIe Gen5 x16──► R-Tile IP ──► pcie_axi_bridge ──► Address Decoder
+                                │                                   │
+                                │                   ┌───────┬───────┼───────┬───────┐
+                                │                   │       │       │       │       │
+                                │                   ▼       ▼       ▼       ▼       ▼
+                                │                 DMA     RAM    PCIe    AXI     AXI
+                                │                Regs   (4KB)  Sniffer Slave   Master
+                                │                  │                  Sniff   Sniff
+                                │                  │
+                                │                  ▼
+                                │            dma_engine ──► RAM
+                                │                  │
+                                │   (DMA to host)  │
+                                ◄──────────────────┘
 ```
+
+**Three Sniffers with Shared Timestamp:**
+- PCIe Sniffer: Captures TLPs on PCIe interface (host ↔ R-Tile)
+- AXI Slave Sniffer: Captures BAR access transactions (host → FPGA)
+- AXI Master Sniffer: Captures DMA transactions (FPGA → host memory)
+
+All sniffers share a global timestamp for event correlation.
 
 ## Memory Map (BAR0)
 
-| Address       | Region        | Description                      |
-|---------------|---------------|----------------------------------|
-| 0x0000-0x0FFF | DMA Engine    | Control, status, DMA config      |
-| 0x1000-0x1FFF | Local RAM     | 4KB buffer (host + DMA access)   |
-| 0x2000-0x2FFF | PCIe Sniffer  | 256-entry TLP trace buffer       |
-| 0x3000-0x3FFF | AXI Sniffer   | 64-entry AXI transaction trace   |
+| Address       | Region            | Description                      |
+|---------------|-------------------|----------------------------------|
+| 0x0000-0x0FFF | DMA Engine        | Control, status, DMA config      |
+| 0x1000-0x1FFF | Local RAM         | 4KB buffer (host + DMA access)   |
+| 0x2000-0x2FFF | PCIe Sniffer      | 256-entry TLP trace buffer       |
+| 0x3000-0x37FF | AXI Slave Sniffer | 64-entry BAR access trace        |
+| 0x3800-0x3FFF | AXI Master Sniffer| 64-entry DMA to host trace       |
 
 ### DMA Registers (0x0000)
 
@@ -41,7 +54,7 @@ Host CPU --PCIe Gen5 x16--> R-Tile IP --> pcie_axi_bridge --> Address Decoder
 
 | Offset | Name           | Access | Description                              |
 |--------|----------------|--------|------------------------------------------|
-| 0x00   | status         | RO     | [0] rx_seen, [1] tx_seen, [7:4] tx_state, [16] running, [17] triggered, [18] full |
+| 0x00   | status         | RO     | [0] rx_seen, [1] tx_seen, [16] running, [17] triggered, [18] full |
 | 0x04   | control        | WO     | [0] start, [1] stop, [2] clear           |
 | 0x08   | mode           | R/W    | [1:0] capture mode, [5:4] filter         |
 | 0x0C   | trigger_cfg    | R/W    | [7:0] trigger type, [8] type_en          |
@@ -52,7 +65,8 @@ Host CPU --PCIe Gen5 x16--> R-Tile IP --> pcie_axi_bridge --> Address Decoder
 | 0x30   | read_ptr       | R/W    | Select trace entry to read               |
 | 0x34-40| trace_hdr[0-3] | RO     | Selected entry header (128 bits)         |
 | 0x44-60| trace_data[0-7]| RO     | Selected entry data (256 bits)           |
-| 0x64   | trace_meta     | RO     | [0] dir, [4:1] state, [31:5] timestamp   |
+| 0x64   | trace_meta0    | RO     | timestamp[31:0] (cycle counter)          |
+| 0x68   | trace_meta1    | RO     | [0] dir, [1] rx_sop, [2] rx_eop, [3] rx_hvalid, [4] rx_dvalid, [7:5] rx_bar, [8] rx_ready, [9] tx_sop, [10] tx_eop, [11] tx_hvalid, [12] tx_dvalid, [13] tx_ready |
 | 0x70-7C| last_rx_hdr    | RO     | Last RX TLP header                       |
 | 0x80-9C| last_rx_data   | RO     | Last RX TLP data (256 bits)              |
 | 0xA0-AC| last_tx_hdr    | RO     | Last TX TLP header                       |
@@ -60,9 +74,9 @@ Host CPU --PCIe Gen5 x16--> R-Tile IP --> pcie_axi_bridge --> Address Decoder
 
 Capture modes: 0=continuous, 1=stop-on-full, 2=stop-on-trigger, 3=start-on-trigger
 
-### AXI Sniffer Registers (0x3000)
+### AXI Slave Sniffer Registers (0x3000)
 
-64-entry trace buffer capturing internal AXI transactions.
+64-entry trace buffer capturing BAR access (host → FPGA).
 
 | Offset | Name           | Access | Description                              |
 |--------|----------------|--------|------------------------------------------|
@@ -76,6 +90,11 @@ Capture modes: 0=continuous, 1=stop-on-full, 2=stop-on-trigger, 3=start-on-trigg
 | 0x24   | trace_addr     | RO     | Selected entry address                   |
 | 0x28-2C| trace_data     | RO     | Selected entry data (64-bit)             |
 | 0x30   | trace_meta     | RO     | Channel, phase, strobe/resp, timestamp   |
+
+### AXI Master Sniffer Registers (0x3800)
+
+64-entry trace buffer capturing DMA to host memory (FPGA → host).
+Same register layout as AXI Slave Sniffer, offset by 0x800.
 
 ## Variable-Length TLP Support
 
@@ -167,24 +186,30 @@ sudo ./dump_debug $PCIE_EP test  # Self-test with trace capture
 ### Debug Commands
 
 ```bash
-# Show status of both sniffers
+# Show status of all 3 sniffers
 sudo ./dump_debug $PCI status
 
-# Dump PCIe TLP trace (now shows full 256-bit data)
-sudo ./dump_debug $PCI pcie 20
-
-# Dump AXI transaction trace
-sudo ./dump_debug $PCI axi 20
-
-# Dump both traces
+# Dump merged trace (all sniffers, sorted by timestamp)
 sudo ./dump_debug $PCI trace 20
 
-# Start/stop/clear sniffers
+# Dump individual sniffer traces
+sudo ./dump_debug $PCI pcie 20     # PCIe TLPs only
+sudo ./dump_debug $PCI axi 20      # AXI slave (BAR access) only
+sudo ./dump_debug $PCI dma 20      # AXI master (DMA) only
+
+# Start/stop/clear all sniffers (also resets timestamp)
 sudo ./dump_debug $PCI start
 sudo ./dump_debug $PCI stop
 sudo ./dump_debug $PCI clear
 
-# Self-test: capture BAR activity and dump traces
+# Step-by-step debug tests
+sudo ./dump_debug $PCI test_wr     # Trace a single BAR write
+sudo ./dump_debug $PCI test_rd     # Trace a single BAR read
+sudo ./dump_debug $PCI test_rw     # Trace BAR write + read
+sudo ./dump_debug $PCI test_h2c    # Trace DMA host-to-card
+sudo ./dump_debug $PCI test_c2h    # Trace DMA card-to-host
+
+# Full self-test
 sudo ./dump_debug $PCI test
 ```
 
@@ -192,17 +217,17 @@ sudo ./dump_debug $PCI test
 
 ```
 rtl/
-  top.sv              # System top with address decoder
+  top.sv              # System top with address decoder and 3 sniffers
   pcie_axi_bridge.sv  # PCIe<->AXI bridge with multi-CplD support
   pcie_sniffer.sv     # 256-entry PCIe trace (512-bit entries, full TLP data)
-  axi_sniffer.sv      # 64-entry AXI transaction trace
+  axi_sniffer.sv      # 64-entry AXI transaction trace (used for both slave/master)
   dma_engine.sv       # DMA controller (H2C + C2H)
   axi_ram.sv          # 4KB SRAM (M20K)
   rtile_crdt.sv       # Credit manager
   rtile_pkg.sv        # Types and constants
 
 tb/
-  tb_rtile.cpp        # Integration test (10 tests including multi-CplD)
+  tb_rtile.cpp        # Integration test (11 tests including multi-CplD)
   tb_pcie_axi_bridge.cpp  # Bridge unit test
   tb_pcie_sniffer.cpp     # Sniffer unit test (6 tests)
   run.sh, run_bridge.sh, run_sniffer.sh
@@ -215,7 +240,7 @@ fpga/
 
 host/
   main.cpp            # Linux VFIO test application
-  dump_debug.cpp      # Debug sniffer dump (shows full 256-bit TLP data)
+  dump_debug.cpp      # Debug tool with merged trace view
   pcie-util.cpp/h     # VFIO helper functions
   build.sh            # Build script
 ```

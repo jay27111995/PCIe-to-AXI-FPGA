@@ -111,12 +111,7 @@ module pcie_axi_bridge
     input  logic        msix_valid,
     output logic        msix_ready,
     input  logic [63:0] msix_addr,
-    input  logic [31:0] msix_data,
-
-    //=========================================================================
-    // Debug Interface
-    //=========================================================================
-    output logic [3:0]  dbg_tx_state
+    input  logic [31:0] msix_data
 );
 
     //=========================================================================
@@ -613,8 +608,5 @@ module pcie_axi_bridge
     
     // Only accept new RX TLPs when in IDLE state
     assign rx_st_ready = (tx_state == TX_IDLE);
-    
-    // Debug output
-    assign dbg_tx_state = tx_state;
 
 endmodule

@@ -1,17 +1,21 @@
 //-----------------------------------------------------------------------------
-// top.sv - PCIe-to-AXI System Top with DMA
+// top.sv - PCIe-to-AXI System Top with DMA and Debug Sniffers
 //
 // Memory map (BAR0):
 //   0x0000-0x0FFF: DMA engine registers
 //   0x1000-0x1FFF: Local RAM (4KB)
-//   0x2000-0x2FFF: Debug/Sniffer registers (read-only)
+//   0x2000-0x2FFF: PCIe Sniffer (256-entry TLP trace)
+//   0x3000-0x37FF: AXI Slave Sniffer (64-entry, BAR access)
+//   0x3800-0x3FFF: AXI Master Sniffer (64-entry, DMA to host)
+//
+// All sniffers share a global timestamp for event correlation.
 //
 // Architecture:
-//   Host ─PCIe─► pcie_axi_bridge ─AXI─► [DMA regs | RAM | Debug]
-//                      ▲
-//                      │ AXI Master
-//                      │
-//                 dma_engine ─AXI─► RAM
+//   Host ──PCIe──► R-Tile ──► pcie_axi_bridge ──► [DMA regs | RAM | Sniffers]
+//                                   │
+//                                   │ AXI Master (DMA to host)
+//                                   ▼
+//                              dma_engine ──► RAM
 //-----------------------------------------------------------------------------
 module top
     import rtile_pkg::*;
@@ -127,8 +131,6 @@ module top
     logic [31:0] msix_data_i;
     logic        dma_irq_req;
 
-    // Debug signals
-    logic [3:0]  dbg_tx_state;
 
     //=========================================================================
     // PCIe-AXI Bridge
@@ -160,13 +162,29 @@ module top
         .m_axi_rdata(dma_host_rdata), .m_axi_rresp(dma_host_rresp), .m_axi_rvalid(dma_host_rvalid), .m_axi_rready(dma_host_rready),
         // MSI-X
         .msix_valid(msix_valid_i), .msix_ready(msix_ready_i),
-        .msix_addr(msix_addr_i), .msix_data(msix_data_i),
-        // Debug
-        .dbg_tx_state(dbg_tx_state)
+        .msix_addr(msix_addr_i), .msix_data(msix_data_i)
     );
 
     //=========================================================================
-    // PCIe Sniffer (Debug) - 0x2xxx
+    // Global Timestamp - shared across all sniffers for event correlation
+    // Cleared when any sniffer is cleared (via clear_timestamp signal)
+    //=========================================================================
+    logic [31:0] global_timestamp;
+    wire clear_timestamp = (pcie_dbg_wen && dbg_wdata_sel[2]) ||   // PCIe clear
+                           (axi_dbg_wen && dbg_wdata_sel[2]) ||    // AXI slave clear
+                           (dma_dbg_wen && dbg_wdata_sel[2]);      // DMA AXI clear
+    
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            global_timestamp <= 0;
+        else if (clear_timestamp)
+            global_timestamp <= 0;
+        else
+            global_timestamp <= global_timestamp + 1;
+    end
+
+    //=========================================================================
+    // PCIe Sniffer - 0x2000-0x2FFF (256-entry TLP trace buffer)
     //=========================================================================
     wire wr_to_pcie_dbg = brg_awaddr[13] && !brg_awaddr[12];  // 0x2xxx write
     wire pcie_dbg_wen = brg_awvalid && brg_wvalid && wr_to_pcie_dbg;
@@ -175,11 +193,16 @@ module top
     // Select correct 32-bit half based on address bit 2
     wire [31:0] dbg_wdata_sel = brg_awaddr[2] ? brg_wdata[63:32] : brg_wdata[31:0];
     
-    pcie_sniffer u_sniffer (
+    pcie_sniffer u_pcie_sniffer (
         .clk, .rst_n,
-        .rx_st_hdr, .rx_st_data, .rx_st_sop, .rx_st_hvalid, .rx_st_ready,
-        .tx_st_hdr, .tx_st_data, .tx_st_sop, .tx_st_hvalid, .tx_st_ready,
-        .tx_state(dbg_tx_state),
+        .global_timestamp,
+        // RX path - all signals
+        .rx_st_hdr, .rx_st_data, .rx_st_sop, .rx_st_eop,
+        .rx_st_hvalid, .rx_st_dvalid, .rx_st_bar, .rx_st_ready,
+        // TX path - all signals
+        .tx_st_hdr, .tx_st_data, .tx_st_sop, .tx_st_eop,
+        .tx_st_hvalid, .tx_st_dvalid, .tx_st_ready,
+        // Debug register interface
         .dbg_addr(dbg_addr_to_sniffer),
         .dbg_wdata(dbg_wdata_sel),
         .dbg_wen(pcie_dbg_wen),
@@ -187,15 +210,16 @@ module top
     );
 
     //=========================================================================
-    // AXI Sniffer (Debug) - 0x3xxx
+    // AXI Slave Sniffer - 0x3000-0x37FF (64-entry, BAR access trace)
     //=========================================================================
-    wire wr_to_axi_dbg = brg_awaddr[13] && brg_awaddr[12];  // 0x3xxx write
+    wire wr_to_axi_dbg = brg_awaddr[13] && brg_awaddr[12] && !brg_awaddr[11];  // 0x3000-0x37FF
     wire axi_dbg_wen = brg_awvalid && brg_wvalid && wr_to_axi_dbg;
-    logic [31:0] axi_dbg_rdata;
+    logic [31:0] axi_slave_dbg_rdata;
     
-    axi_sniffer #(.DEPTH(64)) u_axi_sniffer (
+    axi_sniffer #(.DEPTH(64)) u_axi_slave_sniffer (
         .clk, .rst_n,
-        // Snoop bridge -> DMA/RAM AXI bus
+        .global_timestamp,
+        // Snoop bridge -> DMA/RAM AXI bus (slave interface)
         .axi_awaddr(brg_awaddr),
         .axi_awvalid(brg_awvalid),
         .axi_awready(brg_awready),
@@ -217,8 +241,46 @@ module top
         .dbg_addr(dbg_addr_to_sniffer[7:0]),
         .dbg_wdata(dbg_wdata_sel),
         .dbg_wen(axi_dbg_wen),
-        .dbg_rdata(axi_dbg_rdata)
+        .dbg_rdata(axi_slave_dbg_rdata)
     );
+
+    //=========================================================================
+    // AXI Master Sniffer - 0x3800-0x3FFF (64-entry, DMA to host trace)
+    //=========================================================================
+    wire wr_to_dma_dbg = brg_awaddr[13] && brg_awaddr[12] && brg_awaddr[11];  // 0x3800-0x3FFF
+    wire dma_dbg_wen = brg_awvalid && brg_wvalid && wr_to_dma_dbg;
+    logic [31:0] axi_master_dbg_rdata;
+    
+    axi_sniffer #(.DEPTH(64)) u_axi_master_sniffer (
+        .clk, .rst_n,
+        .global_timestamp,
+        // Snoop DMA -> host memory AXI bus (master interface)
+        .axi_awaddr(dma_host_awaddr[31:0]),
+        .axi_awvalid(dma_host_awvalid),
+        .axi_awready(dma_host_awready),
+        .axi_wdata(dma_host_wdata),
+        .axi_wstrb(dma_host_wstrb),
+        .axi_wvalid(dma_host_wvalid),
+        .axi_wready(dma_host_wready),
+        .axi_bresp(dma_host_bresp),
+        .axi_bvalid(dma_host_bvalid),
+        .axi_bready(dma_host_bready),
+        .axi_araddr(dma_host_araddr[31:0]),
+        .axi_arvalid(dma_host_arvalid),
+        .axi_arready(dma_host_arready),
+        .axi_rdata(dma_host_rdata),
+        .axi_rresp(dma_host_rresp),
+        .axi_rvalid(dma_host_rvalid),
+        .axi_rready(dma_host_rready),
+        // Debug interface
+        .dbg_addr(dbg_addr_to_sniffer[7:0]),
+        .dbg_wdata(dbg_wdata_sel),
+        .dbg_wen(dma_dbg_wen),
+        .dbg_rdata(axi_master_dbg_rdata)
+    );
+
+    // Mux AXI debug read data based on address bit 11
+    wire [31:0] axi_dbg_rdata = brg_araddr[11] ? axi_master_dbg_rdata : axi_slave_dbg_rdata;
 
     //=========================================================================
     // Address Decode: 0x0xxx=DMA, 0x1xxx=RAM, 0x2xxx=PCIe Debug, 0x3xxx=AXI Debug
