@@ -13,3 +13,4 @@ tb/obj_dir/
 tb/*.vcd
 tb/obj_dbg/
 tb/obj_dir/
+*.sof
