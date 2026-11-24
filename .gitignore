@@ -11,3 +11,5 @@ host/dump_debug
 # Verilator simulation
 tb/obj_dir/
 tb/*.vcd
+tb/obj_dbg/
+tb/obj_dir/
