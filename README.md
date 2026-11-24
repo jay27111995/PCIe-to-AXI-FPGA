@@ -162,10 +162,9 @@ sleep 2
 echo 1 | sudo tee /sys/bus/pci/rescan
 ```
 
-**4. Verify and disable ACS:**
+**4. Verify device enumerated:**
 ```bash
 lspci -s ${PCIE_EP}
-sudo setpci -s ${PCIE_RP} ECAP_ACS+0x6.w=0x0
 ```
 
 **5. Bind to VFIO:**
@@ -179,8 +178,9 @@ echo ${PCIE_EP} | sudo tee /sys/bus/pci/drivers/vfio-pci/bind
 **6. Run tests:**
 ```bash
 cd host && ./build.sh
-sudo ./test_bridge $PCIE_EP      # Basic RAM/DMA test
-sudo ./dump_debug $PCIE_EP test  # Self-test with trace capture
+sudo ./test_bridge $PCIE_EP        # Basic RAM/DMA test
+sudo ./dump_debug $PCIE_EP test    # Self-test with trace capture
+sudo ./bw_test $PCIE_EP all        # Bandwidth measurement
 ```
 
 ### Debug Commands
