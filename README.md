@@ -7,10 +7,10 @@ Intel R-Tile PCIe Gen5 x16 to internal bus bridge with DMA engine for Agilex 7 F
 ```
 Host CPU --PCIe Gen5 x16--> R-Tile IP --> pcie_axi_bridge --> Address Decoder
                                                |                    |
-                                               |              +-----+-----+-----+
-                                               |              |     |     |     |
-                                               |              v     v     v     v
-                                               |           DMA   RAM   PCIe   AXI
+                                               |              +-----+-----+-----+-----+
+                                               |              |     |     |     |     |
+                                               |              v     v     v     v     v
+                                               |           DMA   RAM   PCIe   AXI   ...
                                                |          Regs  (4KB) Sniff  Sniff
                                                |
                                                +--> PCIe TLP (Host MRd/MWr/MSI-X)
@@ -37,7 +37,7 @@ Host CPU --PCIe Gen5 x16--> R-Tile IP --> pcie_axi_bridge --> Address Decoder
 
 ### PCIe Sniffer Registers (0x2000)
 
-256-entry trace buffer capturing PCIe TLPs with trigger support.
+256-entry trace buffer capturing full PCIe TLPs (header + 256-bit data).
 
 | Offset | Name           | Access | Description                              |
 |--------|----------------|--------|------------------------------------------|
@@ -50,8 +50,13 @@ Host CPU --PCIe Gen5 x16--> R-Tile IP --> pcie_axi_bridge --> Address Decoder
 | 0x18   | rx_count       | RO     | Total RX TLPs seen                       |
 | 0x1C   | tx_count       | RO     | Total TX TLPs seen                       |
 | 0x30   | read_ptr       | R/W    | Select trace entry to read               |
-| 0x34-4C| trace_entry    | RO     | Selected entry (hdr, data, meta)         |
-| 0x50-7C| last_rx/tx     | RO     | Last-seen RX/TX TLP headers and data     |
+| 0x34-40| trace_hdr[0-3] | RO     | Selected entry header (128 bits)         |
+| 0x44-60| trace_data[0-7]| RO     | Selected entry data (256 bits)           |
+| 0x64   | trace_meta     | RO     | [0] dir, [4:1] state, [31:5] timestamp   |
+| 0x70-7C| last_rx_hdr    | RO     | Last RX TLP header                       |
+| 0x80-9C| last_rx_data   | RO     | Last RX TLP data (256 bits)              |
+| 0xA0-AC| last_tx_hdr    | RO     | Last TX TLP header                       |
+| 0xB0-CC| last_tx_data   | RO     | Last TX TLP data (256 bits)              |
 
 Capture modes: 0=continuous, 1=stop-on-full, 2=stop-on-trigger, 3=start-on-trigger
 
@@ -72,20 +77,44 @@ Capture modes: 0=continuous, 1=stop-on-full, 2=stop-on-trigger, 3=start-on-trigg
 | 0x28-2C| trace_data     | RO     | Selected entry data (64-bit)             |
 | 0x30   | trace_meta     | RO     | Channel, phase, strobe/resp, timestamp   |
 
+## Variable-Length TLP Support
+
+The bridge supports BAR reads up to 4KB with automatic splitting into multiple completion TLPs:
+
+```
+Host Request                    FPGA Response
+─────────────                   ─────────────
+MRd: 64 bytes at 0x1500   →    CplD #1: 32 bytes (0x1500-0x151F)
+                          →    CplD #2: 32 bytes (0x1520-0x153F)
+```
+
+**How it works:**
+
+1. Host sends MRd TLP with length (1-1024 DW)
+2. Bridge issues sequential AXI reads (8 bytes each)
+3. After collecting 32 bytes (or remaining data), sends CplD
+4. Repeats until all bytes sent
+5. Each CplD has correct ByteCount (remaining) and LowerAddress
+
+**Limits:**
+- Max 32 bytes (8 DW) per CplD (R-Tile 256-bit bus width)
+- Max 4KB per request (PCIe spec limit for completions)
+- Sequential AXI reads (not burst)
+
 ## Quick Start
 
 ### Simulation
 
 Run all tests (requires Verilator):
 ```bash
-cd tb && ./run.sh           # Integration test (top.sv) - 6 tests
+cd tb && ./run.sh           # Integration test (top.sv) - 10 tests
 cd tb && ./run_bridge.sh    # Bridge unit test
 cd tb && ./run_sniffer.sh   # Sniffer unit test - 6 tests
 ```
 
 ### FPGA Build
 ```bash
-./build_fpga.sh 0x08  # Revision ID
+./build_fpga.sh 0x0C  # Revision ID
 ```
 
 ### Hardware Test
@@ -104,7 +133,7 @@ sudo setpci -s ${PCIE_RP} CAP_EXP+0x10.B=0x50
 
 **2. Program FPGA:**
 ```bash
-quartus_pgm -c 1 -m JTAG -o "p;pcie-bridge-revid-0x09-*.sof"
+quartus_pgm -c 1 -m JTAG -o "p;pcie-bridge-revid-0x0C-*.sof"
 ```
 
 **3. Enable link and rescan:**
@@ -141,7 +170,7 @@ sudo ./dump_debug $PCIE_EP test  # Self-test with trace capture
 # Show status of both sniffers
 sudo ./dump_debug $PCI status
 
-# Dump PCIe TLP trace
+# Dump PCIe TLP trace (now shows full 256-bit data)
 sudo ./dump_debug $PCI pcie 20
 
 # Dump AXI transaction trace
@@ -164,8 +193,8 @@ sudo ./dump_debug $PCI test
 ```
 rtl/
   top.sv              # System top with address decoder
-  pcie_axi_bridge.sv  # Bidirectional PCIe<->AXI bridge (auto Completer ID)
-  pcie_sniffer.sv     # 256-entry PCIe TLP trace with trigger
+  pcie_axi_bridge.sv  # PCIe<->AXI bridge with multi-CplD support
+  pcie_sniffer.sv     # 256-entry PCIe trace (512-bit entries, full TLP data)
   axi_sniffer.sv      # 64-entry AXI transaction trace
   dma_engine.sv       # DMA controller (H2C + C2H)
   axi_ram.sv          # 4KB SRAM (M20K)
@@ -173,7 +202,7 @@ rtl/
   rtile_pkg.sv        # Types and constants
 
 tb/
-  tb_rtile.cpp        # Integration test (6 tests)
+  tb_rtile.cpp        # Integration test (10 tests including multi-CplD)
   tb_pcie_axi_bridge.cpp  # Bridge unit test
   tb_pcie_sniffer.cpp     # Sniffer unit test (6 tests)
   run.sh, run_bridge.sh, run_sniffer.sh
@@ -186,7 +215,7 @@ fpga/
 
 host/
   main.cpp            # Linux VFIO test application
-  dump_debug.cpp      # Debug sniffer dump utility (PCIe + AXI)
+  dump_debug.cpp      # Debug sniffer dump (shows full 256-bit TLP data)
   pcie-util.cpp/h     # VFIO helper functions
   build.sh            # Build script
 ```
@@ -194,12 +223,28 @@ host/
 ## Features
 
 - **PCIe Gen5 x16** via Intel R-Tile hard IP
+- **Variable-length BAR reads**: Up to 4KB with automatic multi-CplD splitting
 - **Bidirectional bridge**: Host BAR access + DMA to host memory
 - **Auto Completer ID**: Captures BDF from first TLP after enumeration
-- **256-entry PCIe trace**: Capture TLPs with trigger/filter
+- **256-entry PCIe trace**: Full 256-bit TLP data capture with trigger/filter
 - **64-entry AXI trace**: Capture internal AXI transactions
 - **4KB local RAM**: Accessible from host and DMA
 - **MSI-X interrupt** support
+
+## Tests
+
+| Test | Description |
+|------|-------------|
+| 1 | RAM write/read (single 64-bit) |
+| 2 | RAM multiple addresses |
+| 3 | Debug register read (sniffer) |
+| 4 | DMA C2H (RAM → Host) |
+| 5 | DMA H2C (Host → RAM) |
+| 6 | Multi-DW BAR read (4 DW = 16 bytes) |
+| 7 | Multi-CplD read (64 bytes = 2 CplDs) |
+| 8 | Large multi-CplD read (256 bytes = 8 CplDs) |
+| 9 | Odd-length read (10 DW = 8+2 DW CplDs) |
+| 10 | DMA with MSI-X interrupt |
 
 ## License
 
@@ -208,4 +253,3 @@ MIT
 ## Disclaimer
 
 This project was developed with assistance from AI (Claude/Kiro). The code, architecture, and documentation were created through human-AI collaboration.
-
