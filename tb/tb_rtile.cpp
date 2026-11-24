@@ -64,9 +64,18 @@ void send_mwr(uint32_t addr, uint64_t data) {
     dut->rx_st_hdr[3] = (0b011 << 29) | (0b00000 << 24) | 2;
     dut->rx_st_hdr[2] = (0x0200 << 16) | 0xFF;
     dut->rx_st_hdr[1] = 0;
-    dut->rx_st_hdr[0] = addr & ~3;
-    dut->rx_st_data[0] = data & 0xFFFFFFFF;
-    dut->rx_st_data[1] = (data >> 32) & 0xFFFFFFFF;
+    dut->rx_st_hdr[0] = addr & ~3;  // 4-byte align (PCIe requirement)
+    // For 64-bit AXI: data position depends on address bit 2
+    // Bridge will use brg_awaddr[2] to select which 32-bit half
+    if (addr & 4) {
+        // Writing to upper half of 64-bit word
+        dut->rx_st_data[0] = 0;
+        dut->rx_st_data[1] = data & 0xFFFFFFFF;
+    } else {
+        // Writing to lower half (or full 64-bit)
+        dut->rx_st_data[0] = data & 0xFFFFFFFF;
+        dut->rx_st_data[1] = (data >> 32) & 0xFFFFFFFF;
+    }
     dut->rx_st_sop = 1; dut->rx_st_eop = 1;
     dut->rx_st_hvalid = 1; dut->rx_st_dvalid = 1; dut->rx_st_bar = 0;
     tick();

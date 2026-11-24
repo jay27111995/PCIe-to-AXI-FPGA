@@ -172,13 +172,16 @@ module top
     wire pcie_dbg_wen = brg_awvalid && brg_wvalid && wr_to_pcie_dbg;
     logic [31:0] pcie_dbg_rdata;
     
+    // Select correct 32-bit half based on address bit 2
+    wire [31:0] dbg_wdata_sel = brg_awaddr[2] ? brg_wdata[63:32] : brg_wdata[31:0];
+    
     pcie_sniffer u_sniffer (
         .clk, .rst_n,
         .rx_st_hdr, .rx_st_data, .rx_st_sop, .rx_st_hvalid, .rx_st_ready,
         .tx_st_hdr, .tx_st_data, .tx_st_sop, .tx_st_hvalid, .tx_st_ready,
         .tx_state(dbg_tx_state),
         .dbg_addr(dbg_addr_to_sniffer),
-        .dbg_wdata(brg_wdata[31:0]),
+        .dbg_wdata(dbg_wdata_sel),
         .dbg_wen(pcie_dbg_wen),
         .dbg_rdata(pcie_dbg_rdata)
     );
@@ -212,7 +215,7 @@ module top
         .axi_rready(brg_rready),
         // Debug interface
         .dbg_addr(dbg_addr_to_sniffer[7:0]),
-        .dbg_wdata(brg_wdata[31:0]),
+        .dbg_wdata(dbg_wdata_sel),
         .dbg_wen(axi_dbg_wen),
         .dbg_rdata(axi_dbg_rdata)
     );
