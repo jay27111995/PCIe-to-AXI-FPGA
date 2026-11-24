@@ -2,7 +2,6 @@
 build/
 
 # SOF files (FPGA bitstreams)
-*.sof
 
 # Host binaries
 host/test_bridge
@@ -13,4 +12,3 @@ tb/obj_dir/
 tb/*.vcd
 tb/obj_dbg/
 tb/obj_dir/
-*.sof
