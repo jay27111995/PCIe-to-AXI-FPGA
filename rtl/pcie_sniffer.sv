@@ -97,8 +97,8 @@ module pcie_sniffer #(
     //=========================================================================
     // Capture logic
     //=========================================================================
-    wire capture_rx = running && !full && rx_st_hvalid && rx_st_sop;
-    wire capture_tx = running && !full && tx_st_hvalid && tx_st_sop && !(rx_st_hvalid && rx_st_sop);
+    wire capture_rx = running && !full && rx_st_hvalid;  // Capture any hvalid, not just sop
+    wire capture_tx = running && !full && tx_st_hvalid && !rx_st_hvalid;
 
     // Build trace entry QWs
     wire [63:0] rx_qw0 = rx_st_hdr[63:0];
@@ -134,13 +134,13 @@ module pcie_sniffer #(
             last_tx_hdr <= 0;
             last_tx_data <= 0;
         end else begin
-            // Always capture last TLPs
-            if (rx_st_hvalid && rx_st_sop) begin
+            // Always capture last TLPs (on any hvalid)
+            if (rx_st_hvalid) begin
                 last_rx_hdr <= rx_st_hdr;
                 last_rx_data <= rx_st_data;
                 rx_count <= rx_count + 1;
             end
-            if (tx_st_hvalid && tx_st_sop) begin
+            if (tx_st_hvalid) begin
                 last_tx_hdr <= tx_st_hdr;
                 last_tx_data <= tx_st_data;
                 tx_count <= tx_count + 1;
